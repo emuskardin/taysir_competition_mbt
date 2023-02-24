@@ -160,6 +160,7 @@ if __name__ == '__main__':
 
 
     def predict(seq):
-        return learned_model.execute_sequence(learned_model.initial_state, seq[1:-1])[-1]
+        pruned_seq = [i for i in seq if i not in {start_symbol, end_symbol}]
+        return learned_model.execute_sequence(learned_model.initial_state, pruned_seq)[-1]
 
     save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol)
