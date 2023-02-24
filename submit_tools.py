@@ -9,15 +9,20 @@ import mlflow
 
 logging.getLogger("mlflow").setLevel(logging.DEBUG)
 
+
 class func_to_class(mlflow.pyfunc.PythonModel):
     def __init__(self, func):
         self.func = func
+
     def predict(self, context, model_input):
         return self.func(model_input)
 
-def save_function(func, alphabet_size, prefix):
+
+def save_function(func, alphabet_size, prefix, start_symbol, end_symbol):
     print('Testing function...')
     alphabet = list(range(0, alphabet_size))
+    alphabet.remove(start_symbol)
+    alphabet.remove(end_symbol)
     sample_input = choices(alphabet, k=25)
     output = func(sample_input)
     try:

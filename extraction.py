@@ -1,13 +1,49 @@
 import sys
 import torch
 import mlflow
-from aalpy.base import SUL
+from os import path
+from aalpy.base import SUL, Oracle
 from aalpy.learning_algs import run_KV, run_Lstar
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
+from aalpy.utils import load_automaton_from_file
+
+from submit_tools import save_function
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
 print("Your python version:", sys.version)
+
+
+class ValidationDataOracleWrapper(Oracle):
+    def __init__(self, alphabet: list, sul: SUL, oracle, validation_seq):
+        super().__init__(alphabet, sul)
+        self.oracle = oracle
+        self.validation_sequances = validation_seq
+
+    def prune_cex(self, hypothesis, seq):
+        trimmed_cex = seq[1:-1]
+        for i in range(1, len(trimmed_cex) + 1):
+            tmp = trimmed_cex[:i]
+            model_input = [start_symbol] + tmp + [end_symbol]
+            model_output = sul.predict(model_input)
+            hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, tmp)[-1]
+            if model_output != hyp_o:
+                return tmp
+
+        assert False
+
+    def find_cex(self, hypothesis):
+        for seq in self.validation_sequances:
+            model_output = sul.predict(seq)
+            hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, seq[1:-1])[-1]
+
+            if model_output != hyp_o:
+                return self.prune_cex(hypothesis, seq)
+
+        if self.oracle:
+            return self.oracle.find_cex(hypothesis)
+        else:
+            return None
 
 
 def get_validation_data(track, dataset):
@@ -58,6 +94,10 @@ class RnnSUL(SUL):
 
         return bool(prediction)
 
+    def predict(self, seq):
+        encoded_word = self.rnn.one_hot_encode(seq)
+        return bool(self.rnn.predict(encoded_word))
+
 
 def test_accuracy_of_learned_model(rnn, automata, validation_sequances):
     num_tests = len(validation_sequances)
@@ -75,41 +115,51 @@ def test_accuracy_of_learned_model(rnn, automata, validation_sequances):
     return accuracy
 
 
-TRACK = 1
-DATASET = 0
+if __name__ == '__main__':
 
-model_name = f"models/{TRACK}.{DATASET}.taysir.model"
+    TRACK = 1
+    DATASET = 0
 
-model = mlflow.pytorch.load_model(model_name)
-model.eval()
+    model_name = f"models/{TRACK}.{DATASET}.taysir.model"
 
-nb_letters = model.input_size - 1
-cell_type = model.cell_type
+    model = mlflow.pytorch.load_model(model_name)
+    model.eval()
 
-validation_data, start_symbol, end_symbol = get_validation_data(TRACK, DATASET)
+    nb_letters = model.input_size - 1
+    cell_type = model.cell_type
 
-print("The alphabet contains", nb_letters, "symbols.")
-print("The type of the recurrent cells is", cell_type.__name__)
+    validation_data, start_symbol, end_symbol = get_validation_data(TRACK, DATASET)
 
-# for i in range(nb_letters):
-#
-#     e = model.one_hot_encode([])
-#     p = model.predict(e)
-#     print(e, p)
+    print("The alphabet contains", nb_letters, "symbols.")
+    print("The type of the recurrent cells is", cell_type.__name__)
 
-sul = RnnSUL(model)
+    sul = RnnSUL(model)
 
-input_alphabet = list(range(nb_letters))
-input_alphabet.remove(start_symbol)
-input_alphabet.remove(end_symbol)
+    input_alphabet = list(range(nb_letters))
+    input_alphabet.remove(start_symbol)
+    input_alphabet.remove(end_symbol)
 
-eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=5, max_walk_len=30)
-strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
+    # three different oracles, all can achieve same results depending on the parametrization
+    eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=10, max_walk_len=30)
+    strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
 
-learned_model = run_KV(input_alphabet, sul, strong_eq_oracle, 'dfa', max_learning_rounds=30)
-# learned_model.visualize()
+    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None, validation_data)
 
-accuracy = test_accuracy_of_learned_model(model, learned_model, validation_data)
+    load = True
+    learned_model_name = f'learned_models/track_{TRACK}_dataset_{DATASET}_model.dot'
 
-if accuracy >= 0.99:
-    state_setup = learned_model.to_state_setup()
+    if not path.exists(learned_model_name) and load:
+        learned_model = run_KV(input_alphabet, sul, validation_oracle, 'dfa', max_learning_rounds=100)
+    else:
+        learned_model = load_automaton_from_file(learned_model_name, 'dfa')
+
+    accuracy = test_accuracy_of_learned_model(model, learned_model, validation_data)
+
+    if accuracy > 0.99 and not load:
+        learned_model.save(f'learned_models/track_{TRACK}_dataset_{DATASET}_model'[:-4])
+
+
+    def predict(seq):
+        return learned_model.execute_sequence(learned_model.initial_state, seq[1:-1])[-1]
+
+    save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol)
