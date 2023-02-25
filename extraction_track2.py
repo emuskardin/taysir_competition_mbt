@@ -66,24 +66,27 @@ def create_bins(model, validation_set, num_bins=100):
     for i in range(len(bins) - 1):
         assert bin_ranges[i][0] <= bin_ranges[i][1] <= bin_ranges[i + 1][0]
     print('Bins computed.')
-    return bin_ranges
+    return bin_ranges, bins
 
 
 def get_bin_id(obs, bins):
-    if obs < bins[0][0]:
+    if obs <= bins[0][0]:
         return -1
-    if obs > bins[-1][-1]:
+    if obs >= bins[-1][-1]:
         return -2
-    for bin_id, (min, max) in enumerate(bins):
-        if min < obs < max:
+    for bin_id in range(len(bins)):
+        if bins[bin_id][0] <= obs <= bins[bin_id][-1]:
             return bin_id
+
+    print(obs)
+    assert False
 
 
 def predict_from_bin(bin_id, bins):
     if bin_id == -1:
         bin_id = 0
     if bin_id == -2:
-        bin_id = len(bins)
+        bin_id = len(bins) - 1
 
     return choice(bins[bin_id])
 
@@ -160,6 +163,7 @@ def test_accuracy_of_learned_model(rnn, automata, bins, validation_sequances):
         rnn_prediction = rnn.predict(rnn.one_hot_encode(seq))
         seq = seq[1:-1]  # Remove start and end symbol
         output = automata.execute_sequence(automata.initial_state, seq)[-1]
+        print(output)
         prediction = predict_from_bin(output, bins)
 
         rnn_predictions.append(rnn_prediction)
@@ -198,7 +202,7 @@ if __name__ == '__main__':
     # if load and path.exists(learned_model_name):
     #     learned_model = load_automaton_from_file(learned_model_name, 'mealy')
     # else:
-    bins = create_bins(model, validation_data, num_bins=50)
+    bin_ranges, bins = create_bins(model, validation_data, num_bins=50)
 
     sul = RegressionRNNSUL(model, bins)
 
@@ -207,7 +211,10 @@ if __name__ == '__main__':
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
     validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None, validation_data)
 
-    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'mealy', max_learning_rounds=10)
+    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'mealy', max_learning_rounds=2)
+
+    print(learned_model)
+    exit()
 
     accuracy = test_accuracy_of_learned_model(model, learned_model, bins, validation_data)
 
@@ -218,3 +225,4 @@ if __name__ == '__main__':
 
 
     save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol)
+
