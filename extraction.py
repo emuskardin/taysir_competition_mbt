@@ -66,7 +66,7 @@ def get_validation_data(track, dataset):
     return sequences, ss, es
 
 
-class RnnSUL(SUL):
+class BinaryRNNSUL(SUL):
     def __init__(self, rnn):
         super().__init__()
         self.rnn = rnn
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     print("The alphabet contains", nb_letters, "symbols.")
     print("The type of the recurrent cells is", cell_type.__name__)
 
-    sul = RnnSUL(model)
+    sul = BinaryRNNSUL(model)
 
     input_alphabet = list(range(nb_letters))
     input_alphabet.remove(start_symbol)
@@ -145,13 +145,13 @@ if __name__ == '__main__':
 
     validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None, validation_data)
 
-    load = True
+    load = False
     learned_model_name = f'learned_models/track_{TRACK}_dataset_{DATASET}_model.dot'
 
-    if not path.exists(learned_model_name) and load:
-        learned_model = run_KV(input_alphabet, sul, validation_oracle, 'dfa', max_learning_rounds=100)
-    else:
+    if load and path.exists(learned_model_name):
         learned_model = load_automaton_from_file(learned_model_name, 'dfa')
+    else:
+        learned_model = run_KV(input_alphabet, sul, validation_oracle, 'dfa', max_learning_rounds=100)
 
     accuracy = test_accuracy_of_learned_model(model, learned_model, validation_data)
 
