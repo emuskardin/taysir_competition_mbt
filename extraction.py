@@ -81,8 +81,7 @@ class BinaryRNNSUL(SUL):
     def step(self, letter):
         if letter is None:
             if not self.current_word:
-                # TODO empty sequence
-                return False
+                return bool(model.predict(model.one_hot_encode([start_symbol, end_symbol])))
         else:
             self.current_word.append(letter)
 

@@ -136,8 +136,8 @@ class RegressionRNNSUL(SUL):
     def step(self, letter):
         if letter is None:
             if not self.current_word:
-                # TODO empty sequence
-                return False
+                initial_output = model.predict(model.one_hot_encode([start_symbol, end_symbol]))
+                return get_bin_id(initial_output, self.bins)
         else:
             self.current_word.append(letter)
 
@@ -198,7 +198,7 @@ if __name__ == '__main__':
     # if load and path.exists(learned_model_name):
     #     learned_model = load_automaton_from_file(learned_model_name, 'mealy')
     # else:
-    bin_means, bins = create_bins(model, validation_data, num_bins=50)
+    bin_means, bins = create_bins(model, validation_data, num_bins=10)
 
     sul = RegressionRNNSUL(model, bin_means)
 
@@ -207,17 +207,17 @@ if __name__ == '__main__':
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
     validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None, validation_data)
 
-    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'mealy', max_learning_rounds=10)
+    # 50 - 1.09 e-10
+    # 10 - 6.2 e-11
+    # 5 - 1.01 e-10
+    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'moore', max_learning_rounds=10)
 
     accuracy = test_accuracy_of_learned_model(model, learned_model, bin_means, validation_data)
 
-    initial_output = model.predict(model.one_hot_encode([start_symbol,end_symbol]))
-    print(initial_output)
+    exit()
 
     def predict(seq):
         pruned_seq = [i for i in seq if i not in {start_symbol, end_symbol}]
-        if not pruned_seq: # is this the cause of first submission error
-            return initial_output
         reached_bin = learned_model.execute_sequence(learned_model.initial_state, pruned_seq)[-1]
         return predict_from_bin(reached_bin, bin_means)
 
