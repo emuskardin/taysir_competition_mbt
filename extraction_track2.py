@@ -211,11 +211,15 @@ if __name__ == '__main__':
 
     accuracy = test_accuracy_of_learned_model(model, learned_model, bin_means, validation_data)
 
-    exit()
+    initial_output = model.predict(model.one_hot_encode([start_symbol,end_symbol]))
+    print(initial_output)
+
     def predict(seq):
         pruned_seq = [i for i in seq if i not in {start_symbol, end_symbol}]
+        if not pruned_seq: # is this the cause of first submission error
+            return initial_output
         reached_bin = learned_model.execute_sequence(learned_model.initial_state, pruned_seq)[-1]
-        return predict_from_bin(reached_bin, bins)
+        return predict_from_bin(reached_bin, bin_means)
 
 
     save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol)
