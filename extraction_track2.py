@@ -1,5 +1,6 @@
 import sys
 from random import choice
+from statistics import mean
 
 import numpy as np
 import torch
@@ -61,34 +62,31 @@ def create_bins(model, validation_set, num_bins=100):
 
     bins = [observed_outputs[i:i + bin_size] for i in range(0, len(observed_outputs), bin_size)]
 
-    bin_ranges = [(bin[0], bin[-1]) for bin in bins]
+    bin_means = [mean(bin) for bin in bins]
 
-    for i in range(len(bins) - 1):
-        assert bin_ranges[i][0] <= bin_ranges[i][1] <= bin_ranges[i + 1][0]
+    #for i in range(len(bins) - 1):
+    #    assert bin_ranges[i][0] <= bin_ranges[i][1] <= bin_ranges[i + 1][0]
     print('Bins computed.')
-    return bin_ranges, bins
+    return bin_means, bins
 
 
 def get_bin_id(obs, bins):
-    if obs <= bins[0][0]:
-        return -1
-    if obs >= bins[-1][-1]:
-        return -2
-    for bin_id in range(len(bins)):
-        if bins[bin_id][0] <= obs <= bins[bin_id][-1]:
-            return bin_id
+    diffs = []
+    for bin_mean in bins:
+        diffs.append(abs(obs - bin_mean))
 
-    print(obs)
-    assert False
+    return diffs.index(min(diffs))
 
 
 def predict_from_bin(bin_id, bins):
+    return bins[bin_id]
     if bin_id == -1:
         bin_id = 0
     if bin_id == -2:
         bin_id = len(bins) - 1
 
     return choice(bins[bin_id])
+
 
 class ValidationDataOracleWrapper(Oracle):
     def __init__(self, alphabet: list, sul: SUL, oracle, validation_seq):
@@ -157,25 +155,23 @@ class RegressionRNNSUL(SUL):
 
 
 def test_accuracy_of_learned_model(rnn, automata, bins, validation_sequances):
-    rnn_predictions, model_predictions = [], []
+    correct, model_predictions = [], []
 
     for seq in validation_sequances:
-        rnn_prediction = rnn.predict(rnn.one_hot_encode(seq))
+        rnn_output = rnn.predict(rnn.one_hot_encode(seq))
         seq = seq[1:-1]  # Remove start and end symbol
         output = automata.execute_sequence(automata.initial_state, seq)[-1]
-        print(output)
-        prediction = predict_from_bin(output, bins)
+        model_output = predict_from_bin(output, bins)
 
-        rnn_predictions.append(rnn_prediction)
-        model_predictions.append(prediction)
+        correct.append(rnn_output)
+        model_predictions.append(model_output)
 
-    mean_square_error = mean_squared_error(rnn_predictions, model_predictions)
+    mean_square_error = mean_squared_error(correct, model_predictions)
     print(f'MSE on validation set: {mean_square_error}')
     return mean_square_error
 
 
 if __name__ == '__main__':
-
     TRACK = 2
     DATASET = 0
 
@@ -202,22 +198,20 @@ if __name__ == '__main__':
     # if load and path.exists(learned_model_name):
     #     learned_model = load_automaton_from_file(learned_model_name, 'mealy')
     # else:
-    bin_ranges, bins = create_bins(model, validation_data, num_bins=50)
+    bin_means, bins = create_bins(model, validation_data, num_bins=50)
 
-    sul = RegressionRNNSUL(model, bins)
+    sul = RegressionRNNSUL(model, bin_means)
 
     # three different oracles, all can achieve same results depending on the parametrization
     eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=10, max_walk_len=30)
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
     validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None, validation_data)
 
-    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'mealy', max_learning_rounds=2)
+    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'mealy', max_learning_rounds=10)
 
-    print(learned_model)
+    accuracy = test_accuracy_of_learned_model(model, learned_model, bin_means, validation_data)
+
     exit()
-
-    accuracy = test_accuracy_of_learned_model(model, learned_model, bins, validation_data)
-
     def predict(seq):
         pruned_seq = [i for i in seq if i not in {start_symbol, end_symbol}]
         reached_bin = learned_model.execute_sequence(learned_model.initial_state, pruned_seq)[-1]
@@ -225,4 +219,3 @@ if __name__ == '__main__':
 
 
     save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol)
-
