@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 import tempfile
 import time
@@ -19,7 +20,15 @@ class func_to_class(mlflow.pyfunc.PythonModel):
         return self.func(model_input)
 
 
-def save_function(func, alphabet_size, prefix, start_symbol, end_symbol):
+def save_function(func, alphabet_size, prefix, start_symbol, end_symbol, submission_folder=None):
+    if submission_folder:
+        if submission_folder[-1] != '/':
+            submission_folder += '/'
+        if not os.path.exists(submission_folder):
+            os.makedirs(submission_folder)
+    else:
+        submission_folder = ''
+
     print('Testing function...')
     alphabet = list(range(0, alphabet_size))
     alphabet.remove(start_symbol)
@@ -35,7 +44,7 @@ def save_function(func, alphabet_size, prefix, start_symbol, end_symbol):
     print('Creating submission...')
     with tempfile.TemporaryDirectory() as tmp_dir:
         mlflow_path = Path(tmp_dir)
-        zip_path = f"{prefix}_{int(time.time())}.zip"
+        zip_path = f"{submission_folder}{prefix}_{int(time.time())}.zip"
 
         code_paths = list(Path().rglob('*.py'))
 
@@ -49,6 +58,7 @@ def save_function(func, alphabet_size, prefix, start_symbol, end_symbol):
             for f in mlflow_path.rglob('*'):
                 if f.is_file():
                     zip_file.write(f, f.relative_to(mlflow_path))
+
     print(f'Submission created at {zip_path}.')
     print('You can now submit your model on the competition website.')
 
