@@ -53,6 +53,7 @@ class ValidationDataOracleWrapper(Oracle):
 
     def find_cex(self, hypothesis):
         is_cache_sul = isinstance(self.sul, CacheSUL)
+
         for seq in self.validation_sequances:
             if is_cache_sul:
                 model_output = self.sul.sul.get_model_output(seq)
@@ -69,15 +70,15 @@ class ValidationDataOracleWrapper(Oracle):
             return None
 
 
-def test_accuracy_of_learned_classification_model(rnn, automata, validation_sequances):
+def test_accuracy_of_learned_classification_model(sul, automata, validation_sequances):
     num_tests = len(validation_sequances)
     num_positive_outputs = 0
 
     for seq in validation_sequances:
-        rnn_prediction = rnn.predict(rnn.one_hot_encode(seq))
+        model_prediction = sul.get_model_output(seq)
         seq = seq[1:-1]  # Remove start and end symbol
         output = automata.execute_sequence(automata.initial_state, seq)[-1]
-        if output == bool(rnn_prediction):
+        if output == bool(model_prediction):
             num_positive_outputs += 1
 
     accuracy = num_positive_outputs / num_tests

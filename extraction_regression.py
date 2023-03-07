@@ -112,7 +112,7 @@ if __name__ == '__main__':
     # if load and path.exists(learned_model_name):
     #     learned_model = load_automaton_from_file(learned_model_name, 'mealy')
     # else:
-    bin_means = create_bins(model, validation_data, num_bins=50)
+    bin_means = create_bins(model, validation_data, num_bins=10)
 
     sul = RegressionRNNSUL(model, bin_means)
 
@@ -129,6 +129,7 @@ if __name__ == '__main__':
 
 
     def predict(seq):
+        # reached_bin = learned_model.execute_sequence(learned_model.initial_state, seq[1:-1])[-1]
         pruned_seq = [i for i in seq if i not in {start_symbol, end_symbol}]
         reached_bin = learned_model.execute_sequence(learned_model.initial_state, pruned_seq)[-1]
         return predict_from_bin(reached_bin, bin_means)
