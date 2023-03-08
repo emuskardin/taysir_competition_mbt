@@ -20,35 +20,30 @@ class BinaryRNNSUL(SUL):
         super().__init__()
         self.rnn = rnn
         self.current_word = []
+        self.hs = None
 
     # used only in eq. oracle
     def pre(self):
         self.current_word = [start_symbol]
+        with torch.no_grad():
+            _, self.hs = self.rnn(self.rnn.one_hot_encode(self.current_word), None)
 
     def post(self):
         pass
 
     # used only in the learning oracle that is not a validation oracle
     def step(self, letter):
-        if letter is None:
-            if not self.current_word:
-                return model.predict(model.one_hot_encode([start_symbol, end_symbol]))
-        else:
-            self.current_word.append(letter)
+        with torch.no_grad():
+            if letter is None:
+                if not self.current_word:
+                    return model.predict(model.one_hot_encode([start_symbol, end_symbol]))
+            else:
+                output, self.hs = self.rnn(self.rnn.one_hot_encode([letter]), self.hs)
 
-        self.current_word.append(end_symbol)
-        encoded_word = self.rnn.one_hot_encode(self.current_word)
-        prediction = self.rnn.predict(encoded_word)
+            output, _ = self.rnn(self.rnn.one_hot_encode([end_symbol]), self.hs)
 
-        self.current_word.pop(-1)
-
-        return bool(prediction)
-
-    # used in the learning algorithm to query
-    def query(self, word: tuple) -> list:
-        self.num_queries += 1
-        self.num_steps += len(word)
-        return [self.get_model_output((start_symbol,) + word + (end_symbol,))]
+            out = output.argmax(-1).flatten()
+            return bool(out >= 0.5)
 
     # helper method to get an output of a model for a sequence
     def get_model_output(self, seq):
@@ -101,7 +96,7 @@ if __name__ == '__main__':
     not_solved_ids = [1, 8, 10, 11]
     TRACK = 1
 
-    current_test = [3]  #
+    current_test = [1,2]  #
 
     for DATASET in current_test:
         model_name = f"models/{TRACK}.{DATASET}.taysir.model"
@@ -121,15 +116,6 @@ if __name__ == '__main__':
 
         validation_data, start_symbol, end_symbol = get_validation_data(TRACK, DATASET)
 
-        seq = [start_symbol, end_symbol]
-        hs = None
-        for i in seq:
-            ohe = model.one_hot_encode(seq)
-            o, hs = model(ohe, hs)
-            print(o)
-
-        exit()
-
         if DATASET != 7:
             sul = BinaryRNNSUL(model)
         else:
@@ -140,11 +126,11 @@ if __name__ == '__main__':
         input_alphabet.remove(end_symbol)
 
         # three different oracles, all can achieve same results depending on the parametrization
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=10, max_walk_len=40,
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=500, min_walk_len=10, max_walk_len=40,
                                        reset_after_cex=False)
         # strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=20)
         validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle, validation_data,
-                                                        start_symbol, end_symbol)
+                                                        TRACK, DATASET, start_symbol, end_symbol)
 
         learned_model_name = f'learned_models/track_{TRACK}_dataset_{DATASET}_model.dot'
 
@@ -154,16 +140,17 @@ if __name__ == '__main__':
         # deterministic by design
         learned_model = run_KV(input_alphabet, sul, validation_oracle,
                                automaton_type='dfa',
-                               max_learning_rounds=300,
-                               cache_and_non_det_check=False)
+                               max_learning_rounds=None,
+                               cache_and_non_det_check=True)
 
         print(f'Testing model: Track 1, Model {DATASET}: Model size {learned_model.size}')
         # pass SUL instead of the model, as the SUL handles the prediction logic of the RNN/transformer
 
         compact_model_repr = learned_model.to_state_setup()
 
-        accuracy = test_accuracy_of_learned_classification_model(sul, compact_model_repr, validation_data)
+        accuracy = test_accuracy_of_learned_classification_model(sul, learned_model, validation_data)
 
+        exit()
         if accuracy > 0.99:
 
             def predict(seq):

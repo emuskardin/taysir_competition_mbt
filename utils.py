@@ -1,7 +1,7 @@
+import os
+import pickle
+
 from aalpy.base import Oracle
-from aalpy.base.SUL import CacheSUL
-from aalpy.utils.HelperFunctions import all_prefixes
-from aalpy.utils import get_Angluin_dfa
 from sklearn.metrics import mean_squared_error
 from tqdm import tqdm
 
@@ -26,66 +26,65 @@ def get_validation_data(track, dataset):
     return sequences, ss, es
 
 
+def load_validation_data_outputs(sul, validation_data, track, dataset):
+    output_dataset_name = f'datasets/{track}.{dataset}.taysir.validation.output_map.pickle'
+    if not os.path.exists(output_dataset_name):
+        print('Computing outputs for prefixes of all validation sequances.')
+        output_dict = dict()
+        for seq in tqdm(validation_data):
+            sul.pre()
+
+            outputs = []
+            for i in seq[1:-1]:
+                model_output = sul.step(i)
+                outputs.append(model_output)
+
+            output_dict[tuple(seq)] = outputs
+
+        with open(output_dataset_name, 'wb') as handle:
+            pickle.dump(output_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    else:
+        print('Loading outputs for prefixes of all validation sequances.')
+        with open(output_dataset_name, 'rb') as handle:
+            output_dict = pickle.load(handle)
+
+    return output_dict
+
+
 class ValidationDataOracleWrapper(Oracle):
-    def __init__(self, alphabet: list, sul, oracle, validation_seq, start_symbol, end_symbol, test_prefixes=False):
+    def __init__(self, alphabet: list, sul, oracle, validation_seq, track, dataset, start_symbol, end_symbol):
         super().__init__(alphabet, sul)
         self.oracle = oracle
         self.sul = sul
         self.start_symbol = start_symbol
         self.end_symbol = end_symbol
-        self.test_prefixes = test_prefixes
 
-        if test_prefixes:
-            self.test_seq = set()
-            for val_seq in validation_seq:
-                self.test_seq.update(all_prefixes(val_seq[1:-1]))
-            self.test_seq = list(self.test_seq)
-            self.test_seq.sort(key=len)
-        else:
-            self.test_seq = [tuple(v[1:-1]) for v in validation_seq]
+        self.validation_seq_output_map = load_validation_data_outputs(sul, validation_seq, track, dataset)
 
     def find_cex(self, hypothesis):
-        to_remove = []
-        test_seq_prime = self.test_seq.copy()
 
-        for seq in tqdm(test_seq_prime):
-            model_output = self.sul.get_model_output((self.start_symbol,) + seq + (self.end_symbol,))
-            hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, seq)[-1]
+        validation_input_sequances = list(self.validation_seq_output_map.keys())
+        for seq in validation_input_sequances:
+            hypothesis.reset_to_initial()
+            outputs = self.validation_seq_output_map[seq]
 
-            if model_output != hyp_o:
-                for t in to_remove:
-                    self.test_seq.remove(t)
+            inputs = []
+            for index, i in enumerate(seq[1:-1]):
+                inputs.append(i)
+                model_output = outputs[index]
+                hyp_o = hypothesis.step(i)
 
-                if not self.test_prefixes:
-                    return self.prune_cex(hypothesis, seq)
-                else:
-                    return seq
-
-            if self.test_prefixes:
-                to_remove.append(seq)
+                if model_output != hyp_o:
+                    return tuple(inputs)
 
         if self.oracle:
             return self.oracle.find_cex(hypothesis)
         else:
             return None
 
-    def prune_cex(self, hypothesis, seq):
-
-        for i in range(1, len(seq) + 1):
-            tmp = seq[:i]
-            model_input = (self.start_symbol,) + tmp + (self.end_symbol,)
-
-            model_output = self.sul.get_model_output(model_input)
-
-            hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, tmp)[-1]
-            if model_output != hyp_o:
-                return tmp
-
-        assert False
-
 
 def get_output(model, seq):
-    current_state = model['q0'] # test
+    current_state = model['s0']  # test
     for i in seq:
         current_state = model[current_state[1][i]]
     return current_state[0]
@@ -97,7 +96,8 @@ def test_accuracy_of_learned_classification_model(sul, automata, validation_sequ
 
     for seq in validation_sequances:
         model_prediction = sul.get_model_output(seq)
-        output = get_output(automata, seq)
+        seq = seq[1:-1]  # Remove start and end symbol
+        output = automata.execute_sequence(automata.initial_state, seq)[-1]
         if output == bool(model_prediction):
             num_positive_outputs += 1
 
@@ -121,10 +121,3 @@ def test_accuracy_of_learned_regression_model(rnn, automata, bins, bin_predict_f
     mean_square_error = mean_squared_error(correct, model_predictions)
     print(f'MSE on validation set: {mean_square_error}')
     return mean_square_error
-
-if __name__ == '__main__':
-    s = get_Angluin_dfa()
-    s = s.to_state_setup()
-
-    o = get_output(s, ['a', 'b'])
-    print(o)
