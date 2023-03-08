@@ -5,8 +5,7 @@ import mlflow
 import torch
 from aalpy.base import SUL
 from aalpy.learning_algs import run_KV, run_Lstar
-from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
-from aalpy.utils import load_automaton_from_file
+from aalpy.oracles import RandomWordEqOracle
 
 from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model
@@ -22,12 +21,14 @@ class BinaryRNNSUL(SUL):
         self.rnn = rnn
         self.current_word = []
 
+    # used only in eq. oracle
     def pre(self):
         self.current_word = [start_symbol]
 
     def post(self):
         pass
 
+    # used only in the learning oracle that is not a validation oracle
     def step(self, letter):
         if letter is None:
             if not self.current_word:
@@ -43,6 +44,13 @@ class BinaryRNNSUL(SUL):
 
         return bool(prediction)
 
+    # used in the learning algorithm to query
+    def query(self, word: tuple) -> list:
+        self.num_queries += 1
+        self.num_steps += len(word)
+        return [self.get_model_output((start_symbol,) + word + (end_symbol,))]
+
+    # helper method to get an output of a model for a sequence
     def get_model_output(self, seq):
         encoded_word = self.rnn.one_hot_encode(seq)
         return bool(self.rnn.predict(encoded_word))
@@ -84,14 +92,18 @@ class BinaryTransformerSUL(SUL):
             prediction = self.transformer(encoded_word)
             return bool(prediction.logits.argmax().item())
 
+
 if __name__ == '__main__':
 
-    model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    model_ids = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    perfect = [3, 4, 5, 7]
+    almost_perfect = [2, 6, 9]
+    not_solved_ids = [1, 8, 10, 11]
     TRACK = 1
 
-    model_ids = [11]  #
+    current_test = [3]  #
 
-    for DATASET in model_ids:
+    for DATASET in current_test:
         model_name = f"models/{TRACK}.{DATASET}.taysir.model"
 
         model = mlflow.pytorch.load_model(model_name)
@@ -109,6 +121,15 @@ if __name__ == '__main__':
 
         validation_data, start_symbol, end_symbol = get_validation_data(TRACK, DATASET)
 
+        seq = [start_symbol, end_symbol]
+        hs = None
+        for i in seq:
+            ohe = model.one_hot_encode(seq)
+            o, hs = model(ohe, hs)
+            print(o)
+
+        exit()
+
         if DATASET != 7:
             sul = BinaryRNNSUL(model)
         else:
@@ -121,30 +142,36 @@ if __name__ == '__main__':
         # three different oracles, all can achieve same results depending on the parametrization
         eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=10, max_walk_len=40,
                                        reset_after_cex=False)
-        strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=20)
+        # strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=20)
+        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle, validation_data,
+                                                        start_symbol, end_symbol)
 
-        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle, validation_data, start_symbol,
-                                                        end_symbol)
-
-        load = False
         learned_model_name = f'learned_models/track_{TRACK}_dataset_{DATASET}_model.dot'
 
-        if load and path.exists(learned_model_name):
-            learned_model = load_automaton_from_file(learned_model_name, 'dfa')
-        else:
-            learned_model = run_KV(input_alphabet, sul, validation_oracle, 'dfa', max_learning_rounds=100)
+        # cache and non-det check has to be set to false, as query method has been optimized for the specific use
+        # case. Instead of returning all outputs for a sequence, it returns just the last output, which is
+        # perfectly fine and has no downside, but makes it much more faster. We also know the behaviour is
+        # deterministic by design
+        learned_model = run_KV(input_alphabet, sul, validation_oracle,
+                               automaton_type='dfa',
+                               max_learning_rounds=300,
+                               cache_and_non_det_check=False)
 
         print(f'Testing model: Track 1, Model {DATASET}: Model size {learned_model.size}')
         # pass SUL instead of the model, as the SUL handles the prediction logic of the RNN/transformer
-        accuracy = test_accuracy_of_learned_classification_model(sul, learned_model, validation_data)
 
-        if accuracy > 0.99 and not load:
-            learned_model.save(f'learned_models/track_{TRACK}_dataset_{DATASET}_model')
+        compact_model_repr = learned_model.to_state_setup()
 
+        accuracy = test_accuracy_of_learned_classification_model(sul, compact_model_repr, validation_data)
+
+        if accuracy > 0.99:
 
             def predict(seq):
-                return learned_model.execute_sequence(learned_model.initial_state, seq[1:-1])[-1]
-
+                # TODO test
+                current_state = compact_model_repr['s0']
+                for i in seq[1:-1]:
+                    current_state = compact_model_repr[current_state[1][i]]
+                return current_state[0]
 
             save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol,
                           submission_folder='submission_data')
