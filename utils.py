@@ -1,5 +1,6 @@
 import os
 import pickle
+from random import choices, randint
 
 from aalpy.base import Oracle
 from sklearn.metrics import mean_squared_error
@@ -28,18 +29,20 @@ def get_validation_data(track, dataset):
 
 def load_validation_data_outputs(sul, validation_data, track, dataset):
     output_dataset_name = f'datasets/{track}.{dataset}.taysir.validation.output_map.pickle'
+
     if not os.path.exists(output_dataset_name):
         print('Computing outputs for prefixes of all validation sequances.')
+
         output_dict = dict()
         for seq in tqdm(validation_data):
             sul.pre()
-
             outputs = []
             for i in seq[1:-1]:
                 model_output = sul.step(i)
                 outputs.append(model_output)
 
             output_dict[tuple(seq)] = outputs
+            sul.post()
 
         with open(output_dataset_name, 'wb') as handle:
             pickle.dump(output_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -52,58 +55,81 @@ def load_validation_data_outputs(sul, validation_data, track, dataset):
 
 
 class ValidationDataOracleWrapper(Oracle):
-    def __init__(self, alphabet: list, sul, oracle, validation_seq, track, dataset, start_symbol, end_symbol):
+    def __init__(self, alphabet: list, sul, oracle, validation_data_with_outputs, start_symbol, end_symbol):
         super().__init__(alphabet, sul)
         self.oracle = oracle
         self.sul = sul
         self.start_symbol = start_symbol
         self.end_symbol = end_symbol
 
-        self.validation_seq_output_map = load_validation_data_outputs(sul, validation_seq, track, dataset)
+        self.validation_seq_output_map = validation_data_with_outputs
+        self.validation_processed = False
 
     def find_cex(self, hypothesis):
 
-        validation_input_sequances = list(self.validation_seq_output_map.keys())
-        for seq in validation_input_sequances:
-            hypothesis.reset_to_initial()
-            outputs = self.validation_seq_output_map[seq]
+        if not self.validation_processed:
+            for input_seq, output_seq in self.validation_seq_output_map.items():
+                hypothesis.reset_to_initial()
 
-            inputs = []
-            for index, i in enumerate(seq[1:-1]):
-                inputs.append(i)
-                model_output = outputs[index]
-                hyp_o = hypothesis.step(i)
+                inputs = []
+                for index, i in enumerate(input_seq[1:-1]):
+                    inputs.append(i)
+                    hyp_o = hypothesis.step(i)
 
-                if model_output != hyp_o:
-                    return tuple(inputs)
+                    if hyp_o != output_seq[index]:
+                        return tuple(inputs)
+
+            self.validation_processed = True
+            print('All counterexamples found with prefix-closed validation set.')
+            print('Switching to testing oracle.')
 
         if self.oracle:
-            return self.oracle.find_cex(hypothesis)
+            oracle_cex = self.oracle.find_cex(hypothesis)
+            if oracle_cex is None:
+                self.num_queries = self.oracle.num_queries
+                self.num_steps = self.oracle.num_steps
+            return oracle_cex
         else:
             return None
 
 
-def get_output(model, seq):
-    current_state = model['s0']  # test
+def get_compact_model_output(model, seq):
+    current_state = 's0'
     for i in seq:
-        current_state = model[current_state[1][i]]
-    return current_state[0]
+        current_state = model[current_state][1][i]
+    return model[current_state][0]
 
 
-def test_accuracy_of_learned_classification_model(sul, automata, validation_sequances):
-    num_tests = len(validation_sequances)
-    num_positive_outputs = 0
+def test_accuracy_of_learned_classification_model(sul, automata, validation_sequances,
+                                                  num_random_sequances=0, random_seq_len=40):
+    validation_seq = list(validation_sequances.keys())
+    num_validation_tests = len(validation_seq)
+    ss, es = validation_seq[0][0], validation_seq[0][-1]
+    input_alphabet = list(range(ss))
 
-    for seq in validation_sequances:
-        model_prediction = sul.get_model_output(seq)
-        seq = seq[1:-1]  # Remove start and end symbol
-        output = automata.execute_sequence(automata.initial_state, seq)[-1]
-        if output == bool(model_prediction):
-            num_positive_outputs += 1
+    num_positive_outputs_validation, num_positive_outputs_random = 0, 0
 
-    accuracy = num_positive_outputs / num_tests
-    print(f'Learned model accuracy on validation set: {round(accuracy, 4)}')
-    return accuracy
+    for input_seq, model_outputs in validation_sequances.items():
+        output = get_compact_model_output(automata, input_seq[1:-1])
+        # output = automata.execute_sequence(automata.initial_state, input_seq[1:-1])[-1]
+        if output == model_outputs[-1]:
+            num_positive_outputs_validation += 1
+
+    for _ in range(num_random_sequances):
+        random_string = [ss] + choices(input_alphabet, k=randint(random_seq_len, random_seq_len * 2)) + [es]
+        model_output = sul.get_model_output(random_string)
+        output = get_compact_model_output(automata, random_string[1:-1])
+        if output == model_output:
+            num_positive_outputs_random += 1
+
+    accuracy_val = num_positive_outputs_validation / num_validation_tests
+    print(f'Learned model accuracy on validation test set: {round(accuracy_val, 4)}')
+
+    if num_random_sequances > 0:
+        accuracy_random = num_positive_outputs_random / num_random_sequances
+        print(f'Learned model accuracy on random test set:     {round(accuracy_random, 4)}')
+
+    return accuracy_val, accuracy_random
 
 
 def test_accuracy_of_learned_regression_model(rnn, automata, bins, bin_predict_fun, validation_sequances):

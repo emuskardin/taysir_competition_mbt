@@ -5,10 +5,11 @@ import mlflow
 import torch
 from aalpy.base import SUL
 from aalpy.learning_algs import run_KV, run_Lstar
-from aalpy.oracles import RandomWordEqOracle
+from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 
 from submit_tools import save_function
-from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model
+from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
+    load_validation_data_outputs
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
@@ -42,8 +43,7 @@ class BinaryRNNSUL(SUL):
 
             output, _ = self.rnn(self.rnn.one_hot_encode([end_symbol]), self.hs)
 
-            out = output.argmax(-1).flatten()
-            return bool(out >= 0.5)
+            return bool(output.argmax(-1).flatten() >= 0.5)
 
     # helper method to get an output of a model for a sequence
     def get_model_output(self, seq):
@@ -90,21 +90,21 @@ class BinaryTransformerSUL(SUL):
 
 if __name__ == '__main__':
 
+    track = 1
     model_ids = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     perfect = [3, 4, 5, 7]
     almost_perfect = [2, 6, 9]
     not_solved_ids = [1, 8, 10, 11]
-    TRACK = 1
 
-    current_test = [1,2]  #
+    current_test = [10]
 
-    for DATASET in current_test:
-        model_name = f"models/{TRACK}.{DATASET}.taysir.model"
+    for dataset in current_test:
+        model_name = f"models/{track}.{dataset}.taysir.model"
 
         model = mlflow.pytorch.load_model(model_name)
         model.eval()
 
-        if DATASET != 7:  # RNN
+        if dataset != 7:  # RNN
             nb_letters = model.input_size - 1
             cell_type = model.cell_type
             print("The alphabet contains", nb_letters, "symbols.")
@@ -114,9 +114,9 @@ if __name__ == '__main__':
             print("The alphabet contains", nb_letters, "symbols.")
             print("The model is a transformer (DistilBertForSequenceClassification)")
 
-        validation_data, start_symbol, end_symbol = get_validation_data(TRACK, DATASET)
+        validation_data, start_symbol, end_symbol = get_validation_data(track, dataset)
 
-        if DATASET != 7:
+        if dataset != 7:
             sul = BinaryRNNSUL(model)
         else:
             sul = BinaryTransformerSUL(model)
@@ -126,39 +126,38 @@ if __name__ == '__main__':
         input_alphabet.remove(end_symbol)
 
         # three different oracles, all can achieve same results depending on the parametrization
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=500, min_walk_len=10, max_walk_len=40,
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=1000, min_walk_len=10, max_walk_len=50,
                                        reset_after_cex=False)
-        # strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=20)
-        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle, validation_data,
-                                                        TRACK, DATASET, start_symbol, end_symbol)
+        strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=40)
 
-        learned_model_name = f'learned_models/track_{TRACK}_dataset_{DATASET}_model.dot'
+        validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-        # cache and non-det check has to be set to false, as query method has been optimized for the specific use
-        # case. Instead of returning all outputs for a sequence, it returns just the last output, which is
-        # perfectly fine and has no downside, but makes it much more faster. We also know the behaviour is
-        # deterministic by design
+        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, strong_eq_oracle,
+                                                        validation_data_with_outputs,
+                                                        start_symbol, end_symbol)
+
         learned_model = run_KV(input_alphabet, sul, validation_oracle,
                                automaton_type='dfa',
-                               max_learning_rounds=None,
-                               cache_and_non_det_check=True)
+                               max_learning_rounds=1000,
+                               cache_and_non_det_check=False)
 
-        print(f'Testing model: Track 1, Model {DATASET}: Model size {learned_model.size}')
-        # pass SUL instead of the model, as the SUL handles the prediction logic of the RNN/transformer
+        print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
 
-        compact_model_repr = learned_model.to_state_setup()
+        # to enable saving of large models due to pickle recursion limit
+        compact_model = learned_model.to_state_setup()
 
-        accuracy = test_accuracy_of_learned_classification_model(sul, learned_model, validation_data)
+        # test accuracy
+        acc_val, acc_rand = test_accuracy_of_learned_classification_model(sul, compact_model,
+                                                                          validation_data_with_outputs,
+                                                                          num_random_sequances=1000,
+                                                                          random_seq_len=len(validation_data[0]) - 2)
 
-        exit()
-        if accuracy > 0.99:
+        def predict(seq):
+            current_state = 's0'
+            for i in seq[1:-1]:
+                current_state = compact_model[current_state][1][i]
+            return compact_model[current_state][0]
 
-            def predict(seq):
-                # TODO test
-                current_state = compact_model_repr['s0']
-                for i in seq[1:-1]:
-                    current_state = compact_model_repr[current_state[1][i]]
-                return current_state[0]
 
-            save_function(predict, nb_letters, f'dataset{TRACK}.{DATASET}', start_symbol, end_symbol,
-                          submission_folder='submission_data')
+        save_function(predict, nb_letters, f'dataset{track}.{dataset}', start_symbol, end_symbol,
+                      submission_folder='submission_data')
