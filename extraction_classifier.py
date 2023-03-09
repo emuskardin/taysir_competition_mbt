@@ -102,12 +102,13 @@ class BinaryTransformerSUL(SUL):
     # 3 : 0
     # 4 : 0
     # 5 : 0
-    # 6 : 0.0000100000
+    # 6 : 0.0000100000 (strong oracle finds many cexes, but len seems to be limited to 22?)
     # 7 : 0
     # 8 : 0.3267700042
     # 9 : 0.0074657818
     # 10: 0.0149315637
     # 11: 0.2909509845
+
 
 if __name__ == '__main__':
 
@@ -118,6 +119,7 @@ if __name__ == '__main__':
     almost_perfect = [1, 6, 9, 10]
     not_solved_ids = [8, 11]
 
+    to_sample = [3, 4, 5, 7, 8, 9, 11]
     current_test = [6]
 
     for dataset in current_test:
@@ -148,7 +150,7 @@ if __name__ == '__main__':
         input_alphabet.remove(end_symbol)
 
         # three different oracles, all can achieve same results depending on the parametrization
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=1000, min_walk_len=10, max_walk_len=50,
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=10000, min_walk_len=20, max_walk_len=40,
                                        reset_after_cex=False)
         strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=40)
 
@@ -159,11 +161,11 @@ if __name__ == '__main__':
 
         validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
                                                         validation_data_with_outputs,
-                                                        start_symbol, end_symbol, prefix_closed=True)
+                                                        start_symbol, end_symbol, test_prefixes=True)
 
-        learned_model = run_KV(input_alphabet, sul, eq_oracle,
+        learned_model = run_KV(input_alphabet, sul, validation_oracle,
                                automaton_type='dfa',
-                               max_learning_rounds=100,
+                               max_learning_rounds=None,
                                cache_and_non_det_check=False)
 
         print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')

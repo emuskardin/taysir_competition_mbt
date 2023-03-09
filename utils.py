@@ -57,13 +57,13 @@ def load_validation_data_outputs(sul, validation_data, track, dataset):
 
 class ValidationDataOracleWrapper(Oracle):
     def __init__(self, alphabet: list, sul, oracle, validation_data_with_outputs, start_symbol, end_symbol,
-                 prefix_closed=True):
+                 test_prefixes=True):
         super().__init__(alphabet, sul)
         self.oracle = oracle
         self.sul = sul
         self.start_symbol = start_symbol
         self.end_symbol = end_symbol
-        self.prefix_closed = prefix_closed
+        self.test_prefixes = test_prefixes
 
         self.validation_seq_output_map = validation_data_with_outputs
         self.validation_processed = False
@@ -75,7 +75,7 @@ class ValidationDataOracleWrapper(Oracle):
 
                 hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, input_seq[1:-1])[-1]
 
-                if self.prefix_closed or output_seq[-1] != hyp_o:
+                if self.test_prefixes or output_seq[-1] != hyp_o:
                     hypothesis.reset_to_initial()
                     inputs = []
                     for index, i in enumerate(input_seq[1:-1]):
@@ -131,6 +131,7 @@ def test_accuracy_of_learned_classification_model(sul, automata, validation_sequ
     accuracy_val = num_positive_outputs_validation / num_validation_tests
     print(f'Learned model accuracy on validation test set: {round(accuracy_val, 4)}')
 
+    accuracy_random = -1
     if num_random_sequances > 0:
         accuracy_random = num_positive_outputs_random / num_random_sequances
         print(f'Learned model accuracy on random test set:     {round(accuracy_random, 4)}')
