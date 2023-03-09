@@ -3,6 +3,7 @@ import pickle
 from random import choices, randint
 
 from aalpy.base import Oracle
+from aalpy.utils.HelperFunctions import all_prefixes
 from sklearn.metrics import mean_squared_error
 from tqdm import tqdm
 
@@ -55,12 +56,14 @@ def load_validation_data_outputs(sul, validation_data, track, dataset):
 
 
 class ValidationDataOracleWrapper(Oracle):
-    def __init__(self, alphabet: list, sul, oracle, validation_data_with_outputs, start_symbol, end_symbol):
+    def __init__(self, alphabet: list, sul, oracle, validation_data_with_outputs, start_symbol, end_symbol,
+                 prefix_closed=True):
         super().__init__(alphabet, sul)
         self.oracle = oracle
         self.sul = sul
         self.start_symbol = start_symbol
         self.end_symbol = end_symbol
+        self.prefix_closed = prefix_closed
 
         self.validation_seq_output_map = validation_data_with_outputs
         self.validation_processed = False
@@ -68,16 +71,19 @@ class ValidationDataOracleWrapper(Oracle):
     def find_cex(self, hypothesis):
 
         if not self.validation_processed:
-            for input_seq, output_seq in self.validation_seq_output_map.items():
-                hypothesis.reset_to_initial()
+            for input_seq, output_seq in tqdm(self.validation_seq_output_map.items()):
 
-                inputs = []
-                for index, i in enumerate(input_seq[1:-1]):
-                    inputs.append(i)
-                    hyp_o = hypothesis.step(i)
+                hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, input_seq[1:-1])[-1]
 
-                    if hyp_o != output_seq[index]:
-                        return tuple(inputs)
+                if self.prefix_closed or output_seq[-1] != hyp_o:
+                    hypothesis.reset_to_initial()
+                    inputs = []
+                    for index, i in enumerate(input_seq[1:-1]):
+                        inputs.append(i)
+                        hyp_o = hypothesis.step(i)
+
+                        if hyp_o != output_seq[index]:
+                            return tuple(inputs)
 
             self.validation_processed = True
             print('All counterexamples found with prefix-closed validation set.')
@@ -147,3 +153,25 @@ def test_accuracy_of_learned_regression_model(rnn, automata, bins, bin_predict_f
     mean_square_error = mean_squared_error(correct, model_predictions)
     print(f'MSE on validation set: {mean_square_error}')
     return mean_square_error
+
+
+def test_sul_stepping(sul, input_al, ss, es):
+    num_tests, num_disagreements = 0, 0
+    for _ in tqdm(range(100)):
+        seq = tuple(choices(input_al, k=20))
+        prefixes = all_prefixes(seq)
+        assert seq in prefixes
+
+        for prefix in prefixes:
+
+            num_tests += 1
+            model_output = sul.get_model_output((ss,) + prefix + (es,))
+            sul_output = sul.query(prefix)[-1]
+
+            if model_output != sul_output:
+                print(prefix)
+                num_disagreements += 1
+
+    print(f'Disagree on {num_disagreements} if {num_tests} tests.')
+
+
