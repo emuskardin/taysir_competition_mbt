@@ -97,7 +97,7 @@ class BinaryTransformerSUL(SUL):
             prediction = self.transformer(encoded_word)
             return bool(prediction.logits.argmax().item())
 
-    # 1 : 0.0750300000
+    # 1 : 0.0750300000 (possibly context free, 100 states 0.85 acc, 7700 states 0.92 acc)
     # 2 : 0
     # 3 : 0
     # 4 : 0
@@ -114,15 +114,15 @@ if __name__ == '__main__':
 
     track = 1
 
-    model_ids = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     perfect = [2, 3, 4, 5, 7]
     almost_perfect = [1, 6, 9, 10]
     not_solved_ids = [8, 11]
 
-    to_sample = [3, 4, 5, 7, 8, 9, 11]
-    current_test = [6]
+    to_sample = [3, 4, 5, 7, 8, 11]
+    current_test = [9]
 
-    for dataset in current_test:
+    for dataset in to_sample:
         model_name = f"models/{track}.{dataset}.taysir.model"
 
         model = mlflow.pytorch.load_model(model_name)
@@ -150,7 +150,7 @@ if __name__ == '__main__':
         input_alphabet.remove(end_symbol)
 
         # three different oracles, all can achieve same results depending on the parametrization
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=10000, min_walk_len=20, max_walk_len=40,
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=500, min_walk_len=20, max_walk_len=40,
                                        reset_after_cex=False)
         strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=40)
 
@@ -159,13 +159,13 @@ if __name__ == '__main__':
 
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
+        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle,
                                                         validation_data_with_outputs,
                                                         start_symbol, end_symbol, test_prefixes=True)
 
         learned_model = run_KV(input_alphabet, sul, validation_oracle,
                                automaton_type='dfa',
-                               max_learning_rounds=None,
+                               max_learning_rounds=500,
                                cache_and_non_det_check=False)
 
         print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
