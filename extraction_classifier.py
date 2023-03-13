@@ -4,12 +4,14 @@ from statistics import mean
 import mlflow
 import torch
 from aalpy.base import SUL
-from aalpy.learning_algs import run_KV
+from aalpy.learning_algs import run_KV, run_Lstar
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 
 from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
     load_validation_data_outputs, test_sul_stepping
+
+import sigmapie
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
@@ -86,11 +88,11 @@ class BinaryTransformerSUL(SUL):
         return bool(prediction)
 
     def get_model_output(self, seq):
-        with torch.no_grad():
-            encoded_word = torch.IntTensor([[1] + [a + 2 for a in seq]])
-            prediction = self.transformer(encoded_word)
-            return bool(prediction.logits.argmax().item())
+        encoded_word = torch.IntTensor([[1] + [a + 2 for a in seq]])
+        prediction = self.transformer(encoded_word)
+        return bool(prediction.logits.argmax().item())
 
+    # Current results (13.03)
     # 1 : 0.0750300000 (possibly context free, 100 states 0.85 acc, 7700 states 0.92 acc)
     # 2 : 0
     # 3 : 0
@@ -118,7 +120,7 @@ if __name__ == '__main__':
     not_solved_ids = [8, 11]
 
     to_sample = [11]
-    current_test = [3]
+    current_test = [11]
 
     for dataset in current_test:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -137,7 +139,7 @@ if __name__ == '__main__':
             print("The model is a transformer (DistilBertForSequenceClassification)")
 
         validation_data, start_symbol, end_symbol = get_validation_data(track, dataset)
-        val_data_mean_len = mean([len(x) - 2 for x in validation_data])
+        val_data_mean_len = int(mean([len(x) - 2 for x in validation_data]))
 
         if dataset != 7:
             sul = BinaryRNNSUL(model)
@@ -162,10 +164,10 @@ if __name__ == '__main__':
                                                         validation_data_with_outputs,
                                                         start_symbol, end_symbol, test_prefixes=True)
 
-        learned_model = run_KV(input_alphabet, sul, validation_oracle,
-                               automaton_type='dfa',
-                               max_learning_rounds=500,
-                               cache_and_non_det_check=False)
+        learned_model = run_Lstar(input_alphabet, sul, validation_oracle,
+                                  automaton_type='dfa',
+                                  max_learning_rounds=5,
+                                  cache_and_non_det_check=False)
 
         print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
 
@@ -178,6 +180,7 @@ if __name__ == '__main__':
                                                                           num_random_sequances=1000,
                                                                           random_seq_len=val_data_mean_len // 1.5)
 
+        # https://github.com/alenaks/SigmaPie/blob/master/tutorial/AMP_2019.ipynb
 
         def predict(seq):
             current_state = 's0'
