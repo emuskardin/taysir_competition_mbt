@@ -73,6 +73,9 @@ class ValidationDataOracleWrapper(Oracle):
         if not self.validation_processed:
             for input_seq, output_seq in tqdm(self.validation_seq_output_map.items()):
 
+                self.num_queries += 1
+                self.num_steps += len(input_seq) - 2
+
                 hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, input_seq[1:-1])[-1]
 
                 if self.test_prefixes or output_seq[-1] != hyp_o:
