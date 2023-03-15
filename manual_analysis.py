@@ -5,8 +5,9 @@ from statistics import mean
 import mlflow
 import torch
 from aalpy.base import SUL
-from aalpy.learning_algs import run_KV, run_Lstar
+from aalpy.learning_algs import run_KV, run_Lstar, run_GSM
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
+from aalpy.utils import convert_i_o_traces_for_RPNI
 
 from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     torch.set_grad_enabled(False)
     # binary classification
     track = 1
-    not_solved_ids = [8]
+    not_solved_ids = [8, 11]
 
     for dataset in not_solved_ids:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -96,25 +97,42 @@ if __name__ == '__main__':
         freq_counter = Counter()
         for inputs, outputs in validation_data_with_outputs.items():
             if outputs[-1]:
-                for input in inputs[1:-1]:
-                    freq_counter[input] += 1
+                for i in inputs[1:-1]:
+                    freq_counter[i] += 1
 
         for x in freq_counter.most_common():
             print(x)
 
-        input_alphabet = [i[0] for i in freq_counter.most_common(n=3)]
+        pos, neg = 0, 0
+        for inputs, outputs in validation_data_with_outputs.items():
+            if outputs[-1] and pos < 10:
+                print(f'True: {inputs[1:-1]}')
+                pos+=1
+            if not outputs[-1] and neg < 10:
+                print(f'False: {inputs[1:-1]}')
+                neg+=1
 
-        input_alphabet = [22, 23, 13, 10]
+        current_input = []
+        while True:
+            inp = int(input())
+            if inp == -1:
+                current_input = []
+                continue
+            current_input.append(inp)
+            prediction = sul.get_model_output([start_symbol,] + current_input + [end_symbol])
+            print(f'Output for {current_input} : {prediction}')
 
+        exit()
+        #input_alphabet = [i[0] for i in freq_counter.most_common(n=3)]
         #
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=1000,
-                                       min_walk_len=val_data_mean_len,
-                                       max_walk_len=int(val_data_mean_len * 1.5),
-                                       reset_after_cex=False)
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100,
+                                       min_walk_len=5,
+                                       max_walk_len=5,
+                                       reset_after_cex=True)
 
         learned_model = run_Lstar(input_alphabet, sul, eq_oracle=eq_oracle,
                                   automaton_type='dfa',
-                                  max_learning_rounds=5,
+                                  max_learning_rounds=4,
                                   cache_and_non_det_check=False)
 
         learned_model.visualize()

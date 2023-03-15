@@ -53,9 +53,9 @@ class BinaryRNNSUL(SUL):
         encoded_word = self.rnn.one_hot_encode(seq)
         return bool(self.rnn.predict(encoded_word))
 
-    # def query(self, word: tuple) -> list:
-    #     self.num_queries += 1
-    #     return [self.get_model_output((start_symbol,) + word + (end_symbol,))]
+    def query(self, word: tuple) -> list:
+        self.num_queries += 1
+        return [self.get_model_output((start_symbol,) + word + (end_symbol,))]
 
 
 class BinaryTransformerSUL(SUL):
