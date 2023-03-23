@@ -1,6 +1,5 @@
 import pickle
 import tempfile
-import time
 import zipfile
 from pathlib import Path
 
