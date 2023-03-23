@@ -98,8 +98,8 @@ torch.set_grad_enabled(False)
 # binary classification
 track = 2
 # all challenges
-model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-current_test = [1]
+model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, ]
+current_test = [2]
 
 for dataset in current_test:
     model_name = f"models/{track}.{dataset}.taysir.model"
@@ -125,7 +125,7 @@ for dataset in current_test:
     else:
         sul = None
         print('Not yet implemented')
-        assert False
+        continue
 
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
@@ -141,7 +141,7 @@ for dataset in current_test:
                                                        start_symbol, end_symbol, test_prefixes=False)
 
     learned_model = run_KV(input_alphabet, sul, validation_oracle, 'moore',
-                           max_learning_rounds=100,
+                           max_learning_rounds=30,
                            cache_and_non_det_check=False)
 
     compact_model = learned_model.to_state_setup()
