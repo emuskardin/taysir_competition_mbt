@@ -23,7 +23,9 @@ def get_validation_data(track, dataset):
                 ss, es = seq[0], seq[-1]
             else:
                 assert ss == seq[0] and es == seq[-1]
-            sequences.append(seq)
+            sequences.append(tuple(seq))
+
+    sequences = list(set(sequences))
 
     return sequences, ss, es
 
@@ -102,6 +104,51 @@ class ValidationDataOracleWrapper(Oracle):
             return None
 
 
+class ValidationDataRegressionOracle(Oracle):
+    def __init__(self, alphabet: list, sul, validation_data_with_outputs, start_symbol, end_symbol,
+                 test_prefixes=True):
+        super().__init__(alphabet, sul)
+        self.sul = sul
+        self.mapper = self.sul.mapper
+        assert self.mapper
+        self.start_symbol = start_symbol
+        self.end_symbol = end_symbol
+        self.test_prefixes = test_prefixes
+
+        self.validation_seq_output_map = validation_data_with_outputs
+
+        self.abstract_input_output_map = dict()
+        for inputs, outputs in self.validation_seq_output_map.items():
+            self.abstract_input_output_map[inputs] = [self.mapper.to_abstract(o) for o in outputs]
+        self.validation_processed = False
+
+    def find_cex(self, hypothesis):
+
+        if not self.validation_processed:
+            for input_seq, output_seq in tqdm(self.abstract_input_output_map.items()):
+
+                self.num_queries += 1
+                self.num_steps += len(input_seq) - 2
+
+                hyp_o = hypothesis.execute_sequence(hypothesis.initial_state, input_seq[1:-1])[-1]
+
+                if self.test_prefixes or output_seq[-1] != hyp_o:
+                    hypothesis.reset_to_initial()
+                    inputs = []
+                    for index, i in enumerate(input_seq[1:-1]):
+                        inputs.append(i)
+                        hyp_o = hypothesis.step(i)
+
+                        if hyp_o != output_seq[index]:
+                            return tuple(inputs)
+
+            self.validation_processed = True
+            print('All counterexamples found with prefix-closed validation set.')
+            print('Switching to testing oracle.')
+
+        return None
+
+
 def get_compact_model_output(model, seq):
     current_state = 's0'
     for i in seq:
@@ -109,16 +156,16 @@ def get_compact_model_output(model, seq):
     return model[current_state][0]
 
 
-def test_accuracy_of_learned_classification_model(sul, automata, validation_sequances,
+def test_accuracy_of_learned_classification_model(sul, automata, validation_data_with_outputs,
                                                   num_random_sequances=0, random_seq_len=40):
-    validation_seq = list(validation_sequances.keys())
+    validation_seq = list(validation_data_with_outputs.keys())
     num_validation_tests = len(validation_seq)
     ss, es = validation_seq[0][0], validation_seq[0][-1]
     input_alphabet = list(range(ss))
 
     num_positive_outputs_validation, num_positive_outputs_random = 0, 0
 
-    for input_seq, model_outputs in validation_sequances.items():
+    for input_seq, model_outputs in validation_data_with_outputs.items():
         output = get_compact_model_output(automata, input_seq[1:-1])
         # output = automata.execute_sequence(automata.initial_state, input_seq[1:-1])[-1]
         if output == model_outputs[-1]:
@@ -142,21 +189,38 @@ def test_accuracy_of_learned_classification_model(sul, automata, validation_sequ
     return accuracy_val, accuracy_random
 
 
-def test_accuracy_of_learned_regression_model(rnn, automata, bins, bin_predict_fun, validation_sequances):
+def test_accuracy_of_learned_regression_model(sul, automata, validation_data_with_outputs,
+                                              num_random_sequances=0, random_seq_len=40):
+    validation_seq = list(validation_data_with_outputs.keys())
+    ss, es = validation_seq[0][0], validation_seq[0][-1]
+    input_alphabet = list(range(ss))
+
     correct, model_predictions = [], []
 
-    for seq in validation_sequances:
-        rnn_output = rnn.predict(rnn.one_hot_encode(seq))
-        seq = seq[1:-1]  # Remove start and end symbol
-        output = automata.execute_sequence(automata.initial_state, seq)[-1]
-        model_output = bin_predict_fun(output, bins)
+    for input_seq, model_outputs in validation_data_with_outputs.items():
+        output = get_compact_model_output(automata, input_seq[1:-1])
 
-        correct.append(rnn_output)
-        model_predictions.append(model_output)
+        correct.append(model_outputs[-1])
+        model_predictions.append(output)
 
-    mean_square_error = mean_squared_error(correct, model_predictions)
-    print(f'MSE on validation set: {mean_square_error}')
-    return mean_square_error
+    correct_random, model_predictions_random = [], []
+    # get concrete values
+    sul.mapper = None
+
+    for _ in range(num_random_sequances):
+        random_string = [ss] + choices(input_alphabet, k=randint(random_seq_len, random_seq_len * 2)) + [es]
+        model_output = sul.get_model_output(random_string)
+        output = get_compact_model_output(automata, random_string[1:-1])
+        correct_random.append(model_output)
+        model_predictions_random.append(output)
+
+    mse_validation = mean_squared_error(correct, model_predictions) * pow(10, 6)
+    mse_random = -1
+    print(f'MSE on validation set: {mse_validation}')
+    if num_random_sequances > 0:
+        mse_random = mean_squared_error(correct_random, model_predictions_random) * pow(10, 6)
+        print(f'MSE on random set:     {mse_random}')
+    return mse_validation, mse_random
 
 
 def test_sul_stepping(sul, input_al, ss, es):
@@ -179,3 +243,16 @@ def test_sul_stepping(sul, input_al, ss, es):
     print(f'Disagree on {num_disagreements} if {num_tests} tests.')
 
 
+def visualize_density(validation_data_with_outputs, consider_prefixes=True):
+    observed_outputs = set()
+
+    for _, outputs in validation_data_with_outputs.items():
+        if consider_prefixes:
+            observed_outputs.update(outputs)
+        else:
+            observed_outputs.add(outputs[-1])
+
+    observed_outputs = list(observed_outputs)
+    observed_outputs.sort()
+
+    # TODO kernel density estimation
