@@ -1,3 +1,4 @@
+import pickle
 import sys
 from statistics import mean
 
@@ -11,7 +12,6 @@ from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
     load_validation_data_outputs, test_sul_stepping
 
-import sigmapie
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
@@ -54,7 +54,6 @@ class BinaryRNNSUL(SUL):
         return bool(self.rnn.predict(encoded_word))
 
     def query(self, word: tuple) -> list:
-        self.num_queries += 1
         return [self.get_model_output((start_symbol,) + word + (end_symbol,))]
 
 
@@ -120,7 +119,7 @@ if __name__ == '__main__':
     not_solved_ids = [8, 11]
 
     to_sample = [11]
-    current_test = [11]
+    current_test = [5]
 
     for dataset in current_test:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -151,36 +150,41 @@ if __name__ == '__main__':
         input_alphabet.remove(end_symbol)
 
         # three different oracles, all can achieve same results depending on the parametrization
-        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100,
-                                       min_walk_len=val_data_mean_len,
-                                       max_walk_len=int(val_data_mean_len * 1.5),
+        eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=1000,
+                                       min_walk_len=10,
+                                       max_walk_len=30,
                                        reset_after_cex=False)
 
         strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=val_data_mean_len)
 
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, eq_oracle,
+        validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
                                                         validation_data_with_outputs,
                                                         start_symbol, end_symbol, test_prefixes=True)
 
         learned_model = run_Lstar(input_alphabet, sul, validation_oracle,
                                   automaton_type='dfa',
-                                  max_learning_rounds=5,
+                                  max_learning_rounds=None,
                                   cache_and_non_det_check=False)
 
         print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
 
+        learned_model.initial_state.transitions[start_symbol] = learned_model.initial_state
+        learned_model.initial_state.transitions[end_symbol] = learned_model.initial_state
+        learned_model.make_input_complete('self_loop')
+
         # to enable saving of large models due to pickle recursion limit
         compact_model = learned_model.to_state_setup()
+
+        with open(f'submission_data/model_d_{dataset}_t_{track}.pickle', 'wb') as handle:
+            pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         # test accuracy
         acc_val, acc_rand = test_accuracy_of_learned_classification_model(sul, compact_model,
                                                                           validation_data_with_outputs,
                                                                           num_random_sequances=1000,
                                                                           random_seq_len=val_data_mean_len // 1.5)
-
-        # https://github.com/alenaks/SigmaPie/blob/master/tutorial/AMP_2019.ipynb
 
         def predict(seq):
             current_state = 's0'

@@ -1,5 +1,6 @@
 import sys
 from collections import Counter
+from random import randint, choices
 from statistics import mean
 
 import mlflow
@@ -64,7 +65,7 @@ if __name__ == '__main__':
     torch.set_grad_enabled(False)
     # binary classification
     track = 1
-    not_solved_ids = [8, 11]
+    not_solved_ids = [8,]
 
     for dataset in not_solved_ids:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -93,6 +94,62 @@ if __name__ == '__main__':
 
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
+        pos_seq, neg_seq = set(), set()
+        character_map = []
+        for inputs, outputs in validation_data_with_outputs.items():
+            inputs = inputs[1:-1]
+            for index, o in enumerate(outputs):
+                substring = inputs[:index + 1]
+
+                if o:
+                    pos_seq.add(substring)
+                else:
+                    neg_seq.add(substring)
+
+        print(max(len(o) for o in validation_data_with_outputs.values()))
+
+        pos_seq, neg_seq = list(pos_seq), list(neg_seq)
+
+        print(f'Num positive strings: {len(pos_seq)}')
+        print(f'Num negative strings: {len(neg_seq)}')
+
+        pos_str_lens = [s for s in pos_seq]
+        pos_str_lens.sort(key=len)
+
+        for i in range(20):
+            print(pos_str_lens[i])
+
+        pos_model = set(pos_seq)
+
+        num_positive_outputs_random = 0
+        for _ in range(1000):
+            random_string = [start_symbol] + choices(input_alphabet, k=randint(100, 1000)) + [end_symbol]
+            model_output = sul.get_model_output(random_string)
+            output = tuple(random_string[1:-1]) in pos_model
+            if output == model_output:
+                num_positive_outputs_random += 1
+
+        print(num_positive_outputs_random/1000)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        exit()
         appears_in_all = set(input_alphabet)
         freq_counter = Counter()
         for inputs, outputs in validation_data_with_outputs.items():
