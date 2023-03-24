@@ -12,7 +12,7 @@ from aalpy.utils.HelperFunctions import all_prefixes
 
 from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_regression_model, \
-    load_validation_data_outputs, ValidationDataRegressionOracle
+    load_validation_data_outputs, ValidationDataRegressionOracle, predict_transformer
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
@@ -38,7 +38,8 @@ class NaiveBinPartitioning(AbstractionMapper):
             if consider_prefixes:
                 observed_outputs.update(outputs)
             else:
-                observed_outputs.add(outputs[-1])
+                if outputs:
+                    observed_outputs.add(outputs[-1])
 
         observed_outputs = list(observed_outputs)
         observed_outputs.sort()
@@ -60,11 +61,13 @@ class NaiveBinPartitioning(AbstractionMapper):
 
 
 class RegressionRNNSUL(SUL):
-    def __init__(self, rnn, mapper):
+    def __init__(self, rnn, mapper, is_transformer=False):
         super().__init__()
         self.rnn = rnn
         self.current_word = []
         self.mapper = mapper
+
+        self.is_transformer = is_transformer
 
     def pre(self):
         self.current_word = []
@@ -83,6 +86,8 @@ class RegressionRNNSUL(SUL):
         return self.mapper.to_abstract(prediction)
 
     def get_model_output(self, seq):
+        if self.is_transformer:
+            return predict_transformer(self.rnn, seq)
         encoded_word = self.rnn.one_hot_encode(seq)
         return self.rnn.predict(encoded_word)
 
@@ -98,42 +103,42 @@ torch.set_grad_enabled(False)
 # binary classification
 track = 2
 # all challenges
-model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, ]
-current_test = [2]
+model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+current_test = [9]
 
 for dataset in current_test:
+    print(f'Track 2, Dataset {dataset}')
     model_name = f"models/{track}.{dataset}.taysir.model"
 
     model = mlflow.pytorch.load_model(model_name)
     model.eval()
 
-    nb_letters = model.input_size - 1
-    cell_type = model.cell_type
-
     validation_data, start_symbol, end_symbol = get_validation_data(track, dataset)
-    mean_input_seq_len = mean([len(l) for l in validation_data])
+    mean_input_seq_len = int(mean([len(l) for l in validation_data]))
 
+    if dataset != 10:
+        nb_letters = model.input_size - 1
+        cell_type = model.cell_type
+        print("The type of the recurrent cells is", cell_type.__name__)
+    else:
+        nb_letters = model.distilbert.config.vocab_size
+        print("The model is a transformer (DistilBertForSequenceClassification)")
     print("The alphabet contains", nb_letters, "symbols.")
-    print("The type of the recurrent cells is", cell_type.__name__)
+
+    sul = RegressionRNNSUL(model, None, is_transformer=dataset == 10)
 
     input_alphabet = list(range(nb_letters))
     input_alphabet.remove(start_symbol)
     input_alphabet.remove(end_symbol)
 
-    if dataset != 10:
-        sul = RegressionRNNSUL(model, None)
-    else:
-        sul = None
-        print('Not yet implemented')
-        continue
-
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=25, consider_prefixes=True)
+    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=False)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
-    eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=10, max_walk_len=30)
+    eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=mean_input_seq_len,
+                                   max_walk_len=mean_input_seq_len + 10)
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
 
     validation_oracle = ValidationDataRegressionOracle(input_alphabet, sul,
@@ -145,11 +150,14 @@ for dataset in current_test:
                            cache_and_non_det_check=False)
 
     compact_model = learned_model.to_state_setup()
+
     for state_id, (output, transition_dict) in compact_model.items():
         compact_model[state_id] = (sul.mapper.to_concrete(output), transition_dict)
 
+    compact_model['s0'] = (sul.get_model_output(tuple([start_symbol, end_symbol])), compact_model['s0'][1])
+
     test_accuracy_of_learned_regression_model(sul, compact_model, validation_data_with_outputs,
-                                              num_random_sequances=1000, random_seq_len=mean_input_seq_len // 1.5)
+                                              num_random_sequances=100, random_seq_len=mean_input_seq_len // 1.5)
 
     with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
         pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)

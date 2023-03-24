@@ -2,6 +2,8 @@ import os
 import pickle
 from random import choices, randint
 
+import numpy
+import torch
 from aalpy.base import Oracle
 from aalpy.utils.HelperFunctions import all_prefixes
 from sklearn.metrics import mean_squared_error
@@ -198,14 +200,15 @@ def test_accuracy_of_learned_regression_model(sul, automata, validation_data_wit
     correct, model_predictions = [], []
 
     for input_seq, model_outputs in validation_data_with_outputs.items():
+        if not model_outputs:
+            continue
+
         output = get_compact_model_output(automata, input_seq[1:-1])
 
         correct.append(model_outputs[-1])
         model_predictions.append(output)
 
     correct_random, model_predictions_random = [], []
-    # get concrete values
-    sul.mapper = None
 
     for _ in range(num_random_sequances):
         random_string = [ss] + choices(input_alphabet, k=randint(random_seq_len, random_seq_len * 2)) + [es]
@@ -256,3 +259,39 @@ def visualize_density(validation_data_with_outputs, consider_prefixes=True):
     observed_outputs.sort()
 
     # TODO kernel density estimation
+
+
+# Helper methods to execute a sequence and obtain output on transformers for regression
+
+def make_future_masks(words: torch.Tensor):
+    masks = (words != 0)
+    b, l = masks.size()
+    x = torch.einsum("bi,bj->bij", masks, masks)
+    x *= torch.ones(l, l, dtype=torch.bool, device=x.device).tril()
+    x += torch.eye(l, dtype=torch.bool, device=x.device)
+    return x.type(torch.int8)
+
+
+def predict_next_symbols(model, word):
+    """
+    Args:
+        whole word (list): a complete sequence as a list of integers
+    Returns:
+        the predicted probabilities of the next ids for all prefixes (2-D ndarray)
+    """
+    word = [[a + 1 for a in word]]
+    word = torch.IntTensor(word)
+    model.eval()
+    with torch.no_grad():
+        attention_mask = make_future_masks(word)
+        out = model.forward(word, attention_mask=attention_mask)
+        out = torch.nn.functional.softmax(out.logits[0], dim=1)
+        return out.detach().numpy()[:, 1:]  # the probabilities for padding id (0) are removed
+
+
+def predict_transformer(model, word):
+    probs = predict_next_symbols(model, word[:-1])
+    probas_for_word = [probs[i, a] for i, a in enumerate(word[1:])]
+    value = numpy.array(probas_for_word).prod()
+    return float(value)
+
