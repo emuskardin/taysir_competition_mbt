@@ -247,6 +247,7 @@ def test_sul_stepping(sul, input_al, ss, es):
 
 
 def visualize_density(validation_data_with_outputs, consider_prefixes=True):
+    import matplotlib.pyplot  as plt
     observed_outputs = set()
 
     for _, outputs in validation_data_with_outputs.items():
@@ -258,7 +259,11 @@ def visualize_density(validation_data_with_outputs, consider_prefixes=True):
     observed_outputs = list(observed_outputs)
     observed_outputs.sort()
 
-    # TODO kernel density estimation
+    x_plot = [i for i in range(len(observed_outputs))]
+
+    plt.hist(observed_outputs, bins=len(observed_outputs) // 10)
+
+    plt.show()
 
 
 # Helper methods to execute a sequence and obtain output on transformers for regression
@@ -294,4 +299,3 @@ def predict_transformer(model, word):
     probas_for_word = [probs[i, a] for i, a in enumerate(word[1:])]
     value = numpy.array(probas_for_word).prod()
     return float(value)
-

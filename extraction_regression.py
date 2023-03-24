@@ -12,7 +12,7 @@ from aalpy.utils.HelperFunctions import all_prefixes
 
 from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_regression_model, \
-    load_validation_data_outputs, ValidationDataRegressionOracle, predict_transformer
+    load_validation_data_outputs, ValidationDataRegressionOracle, predict_transformer, visualize_density
 
 print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
@@ -104,7 +104,7 @@ torch.set_grad_enabled(False)
 track = 2
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-current_test = [9]
+current_test = [1]
 
 for dataset in current_test:
     print(f'Track 2, Dataset {dataset}')
@@ -145,9 +145,9 @@ for dataset in current_test:
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
 
-    learned_model = run_KV(input_alphabet, sul, validation_oracle, 'moore',
-                           max_learning_rounds=30,
-                           cache_and_non_det_check=False)
+    learned_model = run_Lstar(input_alphabet, sul, eq_oracle, 'moore',
+                              max_learning_rounds=2,
+                              cache_and_non_det_check=False)
 
     compact_model = learned_model.to_state_setup()
 
