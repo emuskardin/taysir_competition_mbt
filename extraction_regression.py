@@ -133,7 +133,7 @@ for dataset in current_test:
 
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=True)
+    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=20, consider_prefixes=False)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
@@ -145,9 +145,9 @@ for dataset in current_test:
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
 
-    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'moore',
-                              max_learning_rounds=50,
-                              cache_and_non_det_check=False)
+    learned_model = run_KV(input_alphabet, sul, validation_oracle, 'moore',
+                           max_learning_rounds=200,
+                           cache_and_non_det_check=False)
 
     compact_model = learned_model.to_state_setup()
 

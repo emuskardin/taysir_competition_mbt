@@ -95,12 +95,12 @@ if __name__ == '__main__':
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
         pos_seq, neg_seq = set(), set()
-        character_map = []
+
+        character_map = Counter()
         for inputs, outputs in validation_data_with_outputs.items():
             inputs = inputs[1:-1]
             for index, o in enumerate(outputs):
                 substring = inputs[:index + 1]
-
                 if o:
                     pos_seq.add(substring)
                 else:
@@ -109,6 +109,14 @@ if __name__ == '__main__':
         print(max(len(o) for o in validation_data_with_outputs.values()))
 
         pos_seq, neg_seq = list(pos_seq), list(neg_seq)
+
+        for p in pos_seq:
+            for char in p:
+                character_map[char] += 1
+
+        for i in character_map.most_common(10):
+            print(i, character_map[i])
+        exit()
 
         print(f'Num positive strings: {len(pos_seq)}')
         print(f'Num negative strings: {len(neg_seq)}')
