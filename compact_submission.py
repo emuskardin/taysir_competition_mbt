@@ -15,8 +15,7 @@ class func_to_class(mlflow.pyfunc.PythonModel):
 
 
 track = 2
-dataset = 1
-
+dataset = 10
 
 with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'rb') as handle:
     compact_model = pickle.load(handle)
@@ -31,7 +30,7 @@ def predict(seq):
     return compact_model[current_state][0]
 
 
-#zip_path = f"submission_data/model_{track}_{dataset}_{int(time.time())}.zip"
+# zip_path = f"submission_data/model_{track}_{dataset}_{int(time.time())}.zip"
 zip_path = f"submission_data/model_{track}_{dataset}.zip"
 with tempfile.TemporaryDirectory() as tmp_dir:
     mlflow_path = Path(tmp_dir)

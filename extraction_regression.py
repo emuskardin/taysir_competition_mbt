@@ -104,7 +104,7 @@ torch.set_grad_enabled(False)
 track = 2
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-current_test = [1]
+current_test = [10]
 
 for dataset in current_test:
     print(f'Track 2, Dataset {dataset}')
@@ -133,20 +133,20 @@ for dataset in current_test:
 
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=False)
+    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=True)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
-    eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=mean_input_seq_len,
-                                   max_walk_len=mean_input_seq_len + 10)
+    eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100, min_walk_len=2,
+                                   max_walk_len=10)
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=25, walk_len=15)
 
     validation_oracle = ValidationDataRegressionOracle(input_alphabet, sul,
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
 
-    learned_model = run_Lstar(input_alphabet, sul, eq_oracle, 'moore',
-                              max_learning_rounds=2,
+    learned_model = run_KV(input_alphabet, sul, eq_oracle, 'moore',
+                              max_learning_rounds=50,
                               cache_and_non_det_check=False)
 
     compact_model = learned_model.to_state_setup()
