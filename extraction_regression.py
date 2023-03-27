@@ -8,6 +8,7 @@ import torch
 from aalpy.base import SUL
 from aalpy.learning_algs import run_KV, run_Lstar
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
+from aalpy.utils import load_automaton_from_file
 from aalpy.utils.HelperFunctions import all_prefixes
 
 from submit_tools import save_function
@@ -104,7 +105,7 @@ torch.set_grad_enabled(False)
 track = 2
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-current_test = [10]
+current_test = [3]
 
 for dataset in current_test:
     print(f'Track 2, Dataset {dataset}')
@@ -133,7 +134,7 @@ for dataset in current_test:
 
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=20, consider_prefixes=False)
+    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=False)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
@@ -145,9 +146,11 @@ for dataset in current_test:
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
 
-    learned_model = run_KV(input_alphabet, sul, validation_oracle, 'moore',
-                           max_learning_rounds=200,
-                           cache_and_non_det_check=False)
+    # learned_model = run_Lstar(input_alphabet, sul, validation_oracle, 'moore',
+    #                        max_learning_rounds=3,
+    #                        cache_and_non_det_check=False)
+
+    learned_model = load_automaton_from_file('ih_1.dot', 'moore')
 
     compact_model = learned_model.to_state_setup()
 
