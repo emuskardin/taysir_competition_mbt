@@ -14,8 +14,8 @@ class func_to_class(mlflow.pyfunc.PythonModel):
         return self.func(model_input)
 
 
-track = 2
-dataset = 3
+track = 1
+dataset = 4
 
 with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'rb') as handle:
     compact_model = pickle.load(handle)

@@ -5,12 +5,12 @@
 | Dataset | Error Rate | Model Size | Notes |
 |---------|------------|------------|-------|
 | 1       | 0.075      | 7700         |    most likely context free   |
-| 2       | 0          | xy         |   regular    |
-| 3       | 0          | xy         |   regular    |
-| 4       | 0          | xy         |   regular    |
-| 5       | 0          | xy         |    regular   |
+| 2       | 0          | 8         |   regular    |
+| 3       | 0          | 9         |   regular    |
+| 4       | 0          | 9         |   regular    |
+| 5       | 0          | 5         |    regular   |
 | 6       | 0.0002     | xy         |       |
-| 7       | 0          | xy         |   transformer, 2 states    |
+| 7       | 0          | 2         |   transformer, 2 states    |
 | 8       | 0.32       | xy         |     unknown grammar type  |
 | 9       | 0.007      | xy         |       |
 | 10      | 0.014      | xy         |       |

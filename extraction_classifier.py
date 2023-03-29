@@ -42,7 +42,7 @@ almost_perfect = [1, 6, 9, 10]
 not_solved_ids = [8, 11]
 
 to_sample = [11]
-current_test = [8]
+current_test = [4]
 
 for dataset in current_test:
     model_name = f"models/{track}.{dataset}.taysir.model"

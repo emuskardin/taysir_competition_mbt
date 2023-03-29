@@ -107,7 +107,7 @@ track = 2
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 current_test = [3]
 
-for dataset in current_test:
+for dataset in model_ids:
     print(f'Track 2, Dataset {dataset}')
     model_name = f"models/{track}.{dataset}.taysir.model"
 
@@ -165,11 +165,11 @@ for dataset in current_test:
     with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
         pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    # def predict(seq):
-    #     current_state = 's0'
-    #     for i in seq[1:-1]:
-    #         current_state = compact_model[current_state][1][i]
-    #     return compact_model[current_state][0]
+    def predict(seq):
+        current_state = 's0'
+        for i in seq[1:-1]:
+            current_state = compact_model[current_state][1][i]
+        return compact_model[current_state][0]
     #
     #
     # save_function(predict, nb_letters, f'dataset{track}.{dataset}', start_symbol, end_symbol,

@@ -1,3 +1,4 @@
+import pickle
 import sys
 from collections import Counter
 from random import randint, choices
@@ -6,7 +7,7 @@ from statistics import mean
 import mlflow
 import torch
 from aalpy.base import SUL
-from aalpy.learning_algs import run_KV, run_Lstar, run_GSM
+from aalpy.learning_algs import run_KV, run_Lstar, run_RPNI
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 from aalpy.utils import convert_i_o_traces_for_RPNI
 
@@ -65,7 +66,7 @@ if __name__ == '__main__':
     torch.set_grad_enabled(False)
     # binary classification
     track = 1
-    not_solved_ids = [8,]
+    not_solved_ids = [4, ]
 
     for dataset in not_solved_ids:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -94,6 +95,22 @@ if __name__ == '__main__':
 
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
+        from aalpy.utils import convert_i_o_traces_for_RPNI
+
+        io_traces = [list(zip(i[1:-1], o)) for i, o in validation_data_with_outputs.items()]
+        dataset = convert_i_o_traces_for_RPNI(io_traces)
+
+        dataset.sort(key=lambda x: len(x[0]))
+        for d in dataset[:10]:
+            print(d)
+
+        learned_model = run_RPNI(dataset, 'dfa', input_completeness='self_loop')
+        compact_model = learned_model.to_state_setup()
+
+        with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
+            pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        exit()
         pos_seq, neg_seq = set(), set()
 
         character_map = Counter()
@@ -137,25 +154,7 @@ if __name__ == '__main__':
             if output == model_output:
                 num_positive_outputs_random += 1
 
-        print(num_positive_outputs_random/1000)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        print(num_positive_outputs_random / 1000)
 
         exit()
         appears_in_all = set(input_alphabet)
@@ -172,10 +171,10 @@ if __name__ == '__main__':
         for inputs, outputs in validation_data_with_outputs.items():
             if outputs[-1] and pos < 10:
                 print(f'True: {inputs[1:-1]}')
-                pos+=1
+                pos += 1
             if not outputs[-1] and neg < 10:
                 print(f'False: {inputs[1:-1]}')
-                neg+=1
+                neg += 1
 
         current_input = []
         while True:
@@ -184,11 +183,11 @@ if __name__ == '__main__':
                 current_input = []
                 continue
             current_input.append(inp)
-            prediction = sul.get_model_output([start_symbol,] + current_input + [end_symbol])
+            prediction = sul.get_model_output([start_symbol, ] + current_input + [end_symbol])
             print(f'Output for {current_input} : {prediction}')
 
         exit()
-        #input_alphabet = [i[0] for i in freq_counter.most_common(n=3)]
+        # input_alphabet = [i[0] for i in freq_counter.most_common(n=3)]
         #
         eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=100,
                                        min_walk_len=5,
