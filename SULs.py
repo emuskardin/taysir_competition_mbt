@@ -40,6 +40,8 @@ class BinaryRNNSUL(SUL):
         return bool(self.rnn.predict(encoded_word))
 
     def query(self, word: tuple) -> list:
+        self.num_queries += 1
+        self.num_steps += len(word)
         return [self.get_model_output((self.start_symbol,) + word + (self.end_symbol,))]
 
 

@@ -1,17 +1,18 @@
 import pickle
+import random
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from random import randint, choices
 from statistics import mean
 
 import mlflow
 import torch
 from aalpy.base import SUL
-from aalpy.learning_algs import run_KV, run_Lstar, run_RPNI
+from aalpy.learning_algs import run_KV, run_Lstar, run_RPNI, run_Alergia
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 from aalpy.utils import convert_i_o_traces_for_RPNI
+from aalpy.utils.HelperFunctions import all_prefixes
 
-from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
     load_validation_data_outputs, test_sul_stepping
 
@@ -66,7 +67,7 @@ if __name__ == '__main__':
     torch.set_grad_enabled(False)
     # binary classification
     track = 1
-    not_solved_ids = [4, ]
+    not_solved_ids = [8, ]
 
     for dataset in not_solved_ids:
         model_name = f"models/{track}.{dataset}.taysir.model"
@@ -95,22 +96,50 @@ if __name__ == '__main__':
 
         validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-        from aalpy.utils import convert_i_o_traces_for_RPNI
+        d = [list(zip(i[1:-1][:100],o[:100])) for i,o in validation_data_with_outputs.items()]
+        d = convert_i_o_traces_for_RPNI(d)
+        e = run_RPNI(d, automaton_type='dfa')
+        for i in input_alphabet:
+            if i not in e.initial_state.transitions.keys():
+                e.initial_state.transitions[i] = e.initial_state
 
-        io_traces = [list(zip(i[1:-1], o)) for i, o in validation_data_with_outputs.items()]
-        dataset = convert_i_o_traces_for_RPNI(io_traces)
+        e.make_input_complete('self_loop')
 
-        dataset.sort(key=lambda x: len(x[0]))
-        for d in dataset[:10]:
-            print(d)
+        num_correct = 0
+        for inputs, outputs in validation_data_with_outputs.items():
+            o = e.execute_sequence(e.initial_state, inputs[1:-1])[-1]
+            if o == outputs[-1]:
+                num_correct += 1
 
-        learned_model = run_RPNI(dataset, 'dfa', input_completeness='self_loop')
-        compact_model = learned_model.to_state_setup()
-
-        with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
-            pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
+        print(num_correct / len(validation_data_with_outputs.keys()))
+        e.save('rpni_model')
         exit()
+
+        for inputs, outputs in validation_data_with_outputs.items():
+            cuttoff = 1 - 0.31715267269232345
+            if random.random() < cuttoff:
+                pred = False
+            else:
+                pred = True
+            if pred == outputs[-1]:
+                num_correct +=1
+            # p = all_prefixes(inputs[history_size:])
+            # p.reverse()
+            # for i in p:
+            #     if i in history_based_prediction.keys():
+            #         pred = choices(list(history_based_prediction[i].keys()), weights=list(history_based_prediction[i].values()))[0]
+            #         if pred == outputs[-1]:
+            #             num_correct += 1
+            #         break
+
+        print(num_correct / len(list(validation_data_with_outputs.values())))
+        # exit()
+        #
+        # from aalpy.utils import convert_i_o_traces_for_RPNI
+        #
+        # io_traces = [list(zip(i[1:-1], o)) for i, o in validation_data_with_outputs.items()]
+        # dataset = convert_i_o_traces_for_RPNI(io_traces)
+
         pos_seq, neg_seq = set(), set()
 
         character_map = Counter()
@@ -123,16 +152,13 @@ if __name__ == '__main__':
                 else:
                     neg_seq.add(substring)
 
-        print(max(len(o) for o in validation_data_with_outputs.values()))
-
         pos_seq, neg_seq = list(pos_seq), list(neg_seq)
 
-        for p in pos_seq:
-            for char in p:
-                character_map[char] += 1
+        print(len(pos_seq) / len(neg_seq))
 
-        for i in character_map.most_common(10):
-            print(i, character_map[i])
+        print('pos', sum(sum(i) for i in pos_seq) / len(pos_seq))
+        print('neg', sum(sum(i) for i in neg_seq) / len(neg_seq))
+
         exit()
 
         print(f'Num positive strings: {len(pos_seq)}')

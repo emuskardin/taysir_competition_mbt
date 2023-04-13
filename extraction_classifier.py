@@ -8,7 +8,6 @@ from aalpy.learning_algs import run_KV, run_Lstar
 from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 
 from SULs import BinaryRNNSUL, BinaryTransformerSUL
-from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_classification_model, \
     load_validation_data_outputs, test_sul_stepping
 
@@ -42,7 +41,7 @@ almost_perfect = [1, 6, 9, 10]
 not_solved_ids = [8, 11]
 
 to_sample = [11]
-current_test = [4]
+current_test = [10]
 
 for dataset in current_test:
     model_name = f"models/{track}.{dataset}.taysir.model"
@@ -82,20 +81,19 @@ for dataset in current_test:
 
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=val_data_mean_len)
 
-    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
+    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, strong_eq_oracle,
                                                     validation_data_with_outputs,
                                                     start_symbol, end_symbol, test_prefixes=True)
 
     learned_model = run_Lstar(input_alphabet, sul, validation_oracle,
                               automaton_type='dfa',
-                              max_learning_rounds=None,
+                              max_learning_rounds=20,
                               cache_and_non_det_check=False)
 
     print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
 
-    learned_model.initial_state.transitions[start_symbol] = learned_model.initial_state
-    learned_model.initial_state.transitions[end_symbol] = learned_model.initial_state
-    learned_model.make_input_complete('self_loop')
+    # learned_model.initial_state.transitions[start_symbol] = learned_model.initial_state
+    # learned_model.initial_state.transitions[end_symbol] = learned_model.initial_state
 
     # to enable saving of large models due to pickle recursion limit
     compact_model = learned_model.to_state_setup()
@@ -108,14 +106,3 @@ for dataset in current_test:
 
     with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
         pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-    # def predict(seq):
-    #     current_state = 's0'
-    #     for i in seq[1:-1]:
-    #         current_state = compact_model[current_state][1][i]
-    #     return compact_model[current_state][0]
-    #
-    #
-    # save_function(predict, nb_letters, f'dataset{track}.{dataset}', start_symbol, end_symbol,
-    #               submission_folder='submission_data')

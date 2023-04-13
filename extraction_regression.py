@@ -11,7 +11,6 @@ from aalpy.oracles import RandomWordEqOracle, RandomWMethodEqOracle
 from aalpy.utils import load_automaton_from_file
 from aalpy.utils.HelperFunctions import all_prefixes
 
-from submit_tools import save_function
 from utils import get_validation_data, ValidationDataOracleWrapper, test_accuracy_of_learned_regression_model, \
     load_validation_data_outputs, ValidationDataRegressionOracle, predict_transformer, visualize_density
 
@@ -105,9 +104,11 @@ torch.set_grad_enabled(False)
 track = 2
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-current_test = [3]
+current_test = [4]
 
-for dataset in model_ids:
+room_for_impr = [4,8]
+
+for dataset in current_test:
     print(f'Track 2, Dataset {dataset}')
     model_name = f"models/{track}.{dataset}.taysir.model"
 
@@ -134,7 +135,7 @@ for dataset in model_ids:
 
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=10, consider_prefixes=False)
+    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=15, consider_prefixes=True)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
@@ -146,18 +147,16 @@ for dataset in model_ids:
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
 
-    # learned_model = run_Lstar(input_alphabet, sul, validation_oracle, 'moore',
-    #                        max_learning_rounds=3,
-    #                        cache_and_non_det_check=False)
+    learned_model = run_KV(input_alphabet, sul, validation_oracle, 'moore',
+                           max_learning_rounds=150,
+                           cache_and_non_det_check=False)
 
-    learned_model = load_automaton_from_file('ih_1.dot', 'moore')
+    # replace discrete outputs with bin means
+    for state in learned_model.states:
+        state.output = sul.mapper.to_concrete(state.output)
+    learned_model.initial_state.output = sul.get_model_output(tuple([start_symbol, end_symbol]))
 
     compact_model = learned_model.to_state_setup()
-
-    for state_id, (output, transition_dict) in compact_model.items():
-        compact_model[state_id] = (sul.mapper.to_concrete(output), transition_dict)
-
-    compact_model['s0'] = (sul.get_model_output(tuple([start_symbol, end_symbol])), compact_model['s0'][1])
 
     test_accuracy_of_learned_regression_model(sul, compact_model, validation_data_with_outputs,
                                               num_random_sequances=100, random_seq_len=mean_input_seq_len // 1.5)
@@ -165,12 +164,9 @@ for dataset in model_ids:
     with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
         pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+
     def predict(seq):
         current_state = 's0'
         for i in seq[1:-1]:
             current_state = compact_model[current_state][1][i]
         return compact_model[current_state][0]
-    #
-    #
-    # save_function(predict, nb_letters, f'dataset{track}.{dataset}', start_symbol, end_symbol,
-    #               submission_folder='submission_data')
