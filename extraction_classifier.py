@@ -41,7 +41,7 @@ almost_perfect = [1, 6, 9, 10]
 not_solved_ids = [8, 11]
 
 to_sample = [11]
-current_test = [10]
+current_test = [8]
 
 for dataset in current_test:
     model_name = f"models/{track}.{dataset}.taysir.model"
@@ -81,13 +81,13 @@ for dataset in current_test:
 
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=val_data_mean_len)
 
-    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, strong_eq_oracle,
+    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
                                                     validation_data_with_outputs,
                                                     start_symbol, end_symbol, test_prefixes=True)
 
-    learned_model = run_Lstar(input_alphabet, sul, validation_oracle,
+    learned_model = run_KV(input_alphabet, sul, validation_oracle,
                               automaton_type='dfa',
-                              max_learning_rounds=20,
+                              max_learning_rounds=500,
                               cache_and_non_det_check=False)
 
     print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')

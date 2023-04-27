@@ -42,6 +42,9 @@ def load_validation_data_outputs(sul, validation_data, track, dataset):
         for seq in tqdm(validation_data):
             sul.pre()
             outputs = []
+            # ignore long sequance in datasets 8 and 11 due to computational overhead
+            if track == 1 and dataset in {8,11} and len(seq) > 100:
+                continue
             for i in seq[1:-1]:
                 model_output = sul.step(i)
                 outputs.append(model_output)
