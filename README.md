@@ -37,13 +37,13 @@ Repository Structure
 
 | Dataset | Error Rate | Model Size | Learning Parameters | Notes |
 |---------|------------|------------|---------------------|-------|
-| 1       | 0.175      | Not recorded         |                     |       |
-| 2       | 0.0097     | Not recorded         |                     |       |
-| 3       | 0.00003     | Not recorded         |                     |       |
-| 4       | 0.000006   | Not recorded         |                     |       |
-| 5       | 0.00000007 | Not recorded         |                     |       |
+| 1       | 0.175      | 860         |    500 LR, 200 bins                 |       |
+| 2       | 0.0097     | 123         |          100 LR, 10 bins           |       |
+| 3       | 0.00003     | 106         |     50 LR, 10 bins                |       |
+| 4       | 0.000006   | 102         |        50LR, 10 bins            |       |
+| 5       | 0.00000007 | 118         |         50 LR, 12 bins           |       |
 | 6       | 0.1971      | 318         |      200 LR, 20 bins               |       |
 | 7       | 0.0      | 150         |       100 LR, 15 bins        |       |
-| 8       | 0.0443     | Not recorded         |                     |       |
+| 8       | 0.0443     | 146         |     100 LR,   15 bins           |       |
 | 9       | 0.0        | 55         | 30 LR, 10 bins      |       |
 | 10      | 0.1237      | 1412         | 200 LR, 20 bins           |  transformer     |
