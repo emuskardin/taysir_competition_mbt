@@ -15,35 +15,16 @@ print('PyTorch version :', torch.__version__)
 print('MLflow version :', mlflow.__version__)
 print("Your python version:", sys.version)
 
-# Current results (13.03)
-# 1 : 0.0750300000 (possibly context free, 100 states 0.85 acc, 7700 states 0.92 acc)
-# 2 : 0
-# 3 : 0
-# 4 : 0
-# 5 : 0
-# 6 : 0.0000100000 (strong oracle finds many cexes, but len seems to be limited to 22?)
-# 7 : 0
-# 8 : 0.3267700042
-# 9 : 0.0074657818
-# 10: 0.0149315637
-# 11: 0.2909509845
-
-
 # disable all gradients
 torch.set_grad_enabled(False)
 # binary classification
 track = 1
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-# helper
-perfect = [2, 3, 4, 5, 7]
-almost_perfect = [1, 6, 9, 10]
-not_solved_ids = [8, 11]
 
-to_sample = [11]
-current_test = [8]
+for dataset in model_ids:
+    print(f'Track 1, Dataset {dataset}')
 
-for dataset in current_test:
     model_name = f"models/{track}.{dataset}.taysir.model"
 
     model = mlflow.pytorch.load_model(model_name)
@@ -59,41 +40,50 @@ for dataset in current_test:
         print("The alphabet contains", nb_letters, "symbols.")
         print("The model is a transformer (DistilBertForSequenceClassification)")
 
+    # Load validation data and get start and end symbols
     validation_data, start_symbol, end_symbol = get_validation_data(track, dataset)
     val_data_mean_len = int(mean([len(x) - 2 for x in validation_data]))
 
+    # Wrap a model in a SUL class
     if dataset != 7:
         sul = BinaryRNNSUL(model, start_symbol, end_symbol)
     else:
         sul = BinaryTransformerSUL(model, start_symbol, end_symbol)
 
+    # define input alphabet
     input_alphabet = list(range(nb_letters))
     input_alphabet.remove(start_symbol)
     input_alphabet.remove(end_symbol)
 
+    # get outputs to strings in validation dataset
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
     # three different oracles, all can achieve same results depending on the parametrization
+    # completely random oracle
     eq_oracle = RandomWordEqOracle(input_alphabet, sul, num_walks=1000,
                                    min_walk_len=10,
                                    max_walk_len=30,
                                    reset_after_cex=False)
 
+    # random oracle with state coverage
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=val_data_mean_len)
-
+    # oracle that tests validation sequences (an additional oracle can be added to this oracle, currently set to None)
     validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
                                                     validation_data_with_outputs,
                                                     start_symbol, end_symbol, test_prefixes=True)
 
+    # run learning algorithms for 500 rounds
+    # it will either terminate earlier, or in case of non-regular languages we will end up with 500 state model
+    # (caching is not used due to implementation details of SUL)
     learned_model = run_KV(input_alphabet, sul, validation_oracle,
-                              automaton_type='dfa',
-                              max_learning_rounds=500,
-                              cache_and_non_det_check=False)
+                           automaton_type='dfa',
+                           max_learning_rounds=500,
+                           cache_and_non_det_check=False)
+
+    # visualize the learned model
+    # learned_model.visualize()
 
     print(f'Testing model: Track 1, Model {dataset}: Model size {learned_model.size}')
-
-    # learned_model.initial_state.transitions[start_symbol] = learned_model.initial_state
-    # learned_model.initial_state.transitions[end_symbol] = learned_model.initial_state
 
     # to enable saving of large models due to pickle recursion limit
     compact_model = learned_model.to_state_setup()
@@ -103,6 +93,6 @@ for dataset in current_test:
                                                                       validation_data_with_outputs,
                                                                       num_random_sequances=1000,
                                                                       random_seq_len=val_data_mean_len // 1.5)
-
+    # save to pickle, used to create a submission for Codalabs
     with open(f'submission_data/pickles/model_{track}_{dataset}.pickle', 'wb') as handle:
         pickle.dump(compact_model, handle, protocol=pickle.HIGHEST_PROTOCOL)

@@ -1,6 +1,8 @@
 from aalpy.base import SUL
 from torch import IntTensor
 
+from utils import predict_transformer
+
 
 class BinaryRNNSUL(SUL):
     def __init__(self, rnn, start_symbol, end_symbol):
@@ -14,9 +16,6 @@ class BinaryRNNSUL(SUL):
     # used only in eq. oracle
     def pre(self):
         self.current_word = []
-        # Stepping
-        # self.current_word = [start_symbol]
-        # _, self.hs = self.rnn.forward(self.rnn.one_hot_encode(self.current_word), None)
 
     def post(self):
         pass
@@ -26,13 +25,6 @@ class BinaryRNNSUL(SUL):
         if letter is not None:
             self.current_word.append(letter)
         return self.get_model_output([self.start_symbol] + self.current_word + [self.end_symbol])
-        # # Stepping
-        # if letter is not None:
-        #     _, self.hs = self.rnn.forward(self.rnn.one_hot_encode([letter]), self.hs)
-        #
-        # output, _ = self.rnn.forward(self.rnn.one_hot_encode([end_symbol]), self.hs)
-        #
-        # return bool(output.argmax(-1).flatten() >= 0.5)
 
     # helper method to get an output of a model for a sequence
     def get_model_output(self, seq):
@@ -80,3 +72,44 @@ class BinaryTransformerSUL(SUL):
         encoded_word = IntTensor([[1] + [a + 2 for a in seq]])
         prediction = self.transformer(encoded_word)
         return bool(prediction.logits.argmax().item())
+
+
+# SUL class used for learning
+class RegressionRNNSUL(SUL):
+    def __init__(self, rnn, mapper, start_symbol, end_symbol, is_transformer=False):
+        super().__init__()
+        self.rnn = rnn
+        self.current_word = []
+        self.mapper = mapper
+        self.start_symbol = start_symbol
+        self.end_symbol = end_symbol
+
+        self.is_transformer = is_transformer
+
+    def pre(self):
+        self.current_word = []
+
+    def post(self):
+        pass
+
+    def step(self, letter):
+        if letter is not None:
+            self.current_word.append(letter)
+        prediction = self.get_model_output([self.start_symbol] + self.current_word + [self.end_symbol])
+
+        if not self.mapper:
+            return prediction
+
+        return self.mapper.to_abstract(prediction)
+
+    def get_model_output(self, seq):
+        if self.is_transformer:
+            return predict_transformer(self.rnn, seq)
+        encoded_word = self.rnn.one_hot_encode(seq)
+        return self.rnn.predict(encoded_word)
+
+    def query(self, word: tuple) -> list:
+        prediction = self.get_model_output((self.start_symbol,) + word + (self.end_symbol,))
+        if not self.mapper:
+            return prediction
+        return [self.mapper.to_abstract(prediction)]

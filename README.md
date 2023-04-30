@@ -1,13 +1,11 @@
 ## TAYSIR Competition - Black-box testing oriented approach
 
-This reposatory contains all data required to reproduce models extracted from RNNs and transformers during TAYSIR competition.
+This repository contains all data required to reproduce models extracted from RNNs and transformers during TAYSIR competition.
 All models were submitted under username `EdiMuskardin`. 
 
 This work is joint collaboration between Edi Muskardin and Martin Tappler.
 
 ## Track 1 - Binary Classification
-
-TODO add description
 
 ### Result Summary
 
