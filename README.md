@@ -23,7 +23,7 @@ TODO add description
 | 8       | 0.32       | Unrelated to accuracy         |     Unknown structure  |
 | 9       | 0.007      | [500-1500]         |    No regular representation   |
 | 10      | 0.014      | 1500         |     No regular representation  |
-| 11      | 0.29       | 500         |   Consider only len(val) < 100    |
+| 11      | 0.007       | 500         |   Consider only len(val) < 100    |
 
 
 ## Track 2 - Language Modelling/Regression
