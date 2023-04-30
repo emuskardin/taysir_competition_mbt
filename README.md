@@ -5,6 +5,13 @@ All models were submitted under username `EdiMuskardin`.
 
 This work is joint collaboration between Edi Muskardin and Martin Tappler.
 
+Repository Structure
+- extraction_classifier.py - used to extract models for Track 1
+- extraction_regression.py - used to extract models for Track 2. Contains an abstraction mapper.
+- SULs.py - SUL classes for all types of networks
+- utils.py - utility functions
+- compact_submission.py - helper file used to create compact submissions
+
 ## Track 1 - Binary Classification
 
 ### Result Summary
@@ -25,8 +32,6 @@ This work is joint collaboration between Edi Muskardin and Martin Tappler.
 
 
 ## Track 2 - Language Modelling/Regression
-
-TODO add description
 
 ### Result Summary
 
