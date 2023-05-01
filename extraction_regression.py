@@ -29,10 +29,10 @@ class AbstractionMapper(ABC):
         pass
 
 
-# Mapper that partitions sorted outputs in predefined number of bins
-# Output is mapped to the bin to which it has minimal distance
-class NaiveBinPartitioning(AbstractionMapper):
-    def __init__(self, validation_set_with_outputs, num_bins=20, consider_prefixes=True):
+# Mapper that partitions sorted outputs in predefined number of partitions
+# Output is mapped to the partition to which it has minimal distance
+class NaivePartitioning(AbstractionMapper):
+    def __init__(self, validation_set_with_outputs, num_partitions=20, consider_prefixes=True):
         observed_outputs = set()
 
         for _, outputs in validation_set_with_outputs.items():
@@ -45,25 +45,25 @@ class NaiveBinPartitioning(AbstractionMapper):
         observed_outputs = list(observed_outputs)
         observed_outputs.sort()
 
-        bin_size = len(observed_outputs) // num_bins
+        partition_size = len(observed_outputs) // num_partitions
 
-        bins = [observed_outputs[i:i + bin_size] for i in range(0, len(observed_outputs), bin_size)]
-        self.bin_means = [mean(bin) for bin in bins]
+        partitions = [observed_outputs[i:i + partition_size] for i in range(0, len(observed_outputs), partition_size)]
+        self.partition_means = [mean(p) for p in partitions]
 
     def to_abstract(self, x):
         diffs = []
-        for bin_mean in self.bin_means:
-            diffs.append(abs(x - bin_mean))
+        for partition_mean in self.partition_means:
+            diffs.append(abs(x - partition_mean))
 
         return diffs.index(min(diffs))
 
     def to_concrete(self, x):
-        return self.bin_means[x]
+        return self.partition_means[x]
 
 
 # disable all gradients
 torch.set_grad_enabled(False)
-# binary classification
+# density estimation
 track = 2
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -99,7 +99,7 @@ for dataset in model_ids:
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
     # compute a mapper and assign it to the SUL
-    mapper = NaiveBinPartitioning(validation_data_with_outputs, num_bins=20, consider_prefixes=True)
+    mapper = NaivePartitioning(validation_data_with_outputs, num_partitions=20, consider_prefixes=True)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
@@ -111,13 +111,13 @@ for dataset in model_ids:
     validation_oracle = ValidationDataRegressionOracle(input_alphabet, sul,
                                                        validation_data_with_outputs,
                                                        start_symbol, end_symbol, test_prefixes=False)
-    # run learning algorithms for 150 rounds
+    # run learning algorithms for 20 rounds
     learned_model = run_KV(input_alphabet, sul, validation_oracle,
                            automaton_type='moore',
-                           max_learning_rounds=150,
+                           max_learning_rounds=20,
                            cache_and_non_det_check=False)
 
-    # replace discrete outputs in the learned model with bin means
+    # replace discrete outputs in the learned model with partition mean
     for state in learned_model.states:
         state.output = sul.mapper.to_concrete(state.output)
     learned_model.initial_state.output = sul.get_model_output(tuple([start_symbol, end_symbol]))

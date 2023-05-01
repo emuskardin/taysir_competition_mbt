@@ -22,7 +22,7 @@ track = 1
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
-for dataset in model_ids:
+for dataset in [5]:
     print(f'Track 1, Dataset {dataset}')
 
     model_name = f"models/{track}.{dataset}.taysir.model"
@@ -68,7 +68,7 @@ for dataset in model_ids:
     # random oracle with state coverage
     strong_eq_oracle = RandomWMethodEqOracle(input_alphabet, sul, walks_per_state=100, walk_len=val_data_mean_len)
     # oracle that tests validation sequences (an additional oracle can be added to this oracle, currently set to None)
-    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, None,
+    validation_oracle = ValidationDataOracleWrapper(input_alphabet, sul, strong_eq_oracle,
                                                     validation_data_with_outputs,
                                                     start_symbol, end_symbol, test_prefixes=True)
 

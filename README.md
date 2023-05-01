@@ -11,6 +11,10 @@ Repository Structure
 - SULs.py - SUL classes for all types of networks
 - utils.py - utility functions
 - compact_submission.py - helper file used to create compact submissions
+- extract_from_submitted_models.py - helper file which helped us reverse engineer our submissions
+
+All learned models (extracted from submission files) can be found in `learned_models` directory.
+They can be loaded and visualized with AALpy.
 
 ## Track 1 - Binary Classification
 
@@ -18,15 +22,15 @@ Repository Structure
 
 | Dataset | Error Rate | Model Size | Notes |
 |---------|------------|------------|-------|
-| 1       | 0.075      | 7700         |    most likely context free   |
-| 2       | 0          | 8         |   regular    |
+| 1       | 0.075      | 7708         |    most likely context free   |
+| 2       | 0          | 8 (10 with strong oracle)        |   regular    |
 | 3       | 0          | 9         |   regular    |
-| 4       | 0          | 9         |   regular    |
+| 4       | 0          | 5         |   regular    |
 | 5       | 0          | 5         |    regular   |
 | 6       | 0.0002     | 18         |   can find many cex with strong oracle    |
 | 7       | 0          | 2         |   transformer, 2 states    |
 | 8       | 0.32       | Unrelated to accuracy         |     Unknown structure  |
-| 9       | 0.007      | [500-1500]         |    No regular representation   |
+| 9       | 0.007      | 200         |    No regular representation   |
 | 10      | 0.014      | 1500         |     No regular representation  |
 | 11      | 0.007       | 500         |   Consider only len(val) < 100    |
 
@@ -37,13 +41,15 @@ Repository Structure
 
 | Dataset | Error Rate | Model Size | Learning Parameters |
 |---------|------------|------------|---------------------|
-| 1       | 0.175      | 860         |    500 LR, 200 bins                 |
-| 2       | 0.0097     | 123         |          100 LR, 10 bins           |
-| 3       | 0.00003     | 106         |     50 LR, 10 bins                |
-| 4       | 0.000006   | 102         |        50LR, 10 bins            |
-| 5       | 0.00000007 | 118         |         50 LR, 12 bins           |
-| 6       | 0.1971      | 318         |      200 LR, 20 bins               |
-| 7       | 0.0      | 150         |       100 LR, 15 bins        |
-| 8       | 0.0443     | 146         |     100 LR,   15 bins           |
-| 9       | 0.0        | 55         | 30 LR, 10 bins      |
-| 10      | 0.1237      | 1412         | 200 LR, 20 bins           |
+| 1       | 0.175      | 866         |    500 LR, 200 partitions                 |
+| 2       | 0.0097     | 131         |          100 LR, 10 partitions           |
+| 3       | 0.00003     | 110         |     50 LR, 10 partitions                |
+| 4       | 0.000006   | 105         |        50LR, 10 partitions            |
+| 5       | 0.00000007 | 123         |         50 LR, 12 partitions           |
+| 6       | 0.1971      | 318         |      200 LR, 20 partitions               |
+| 7       | 0.0      | 170         |       100 LR, 15 partitions        |
+| 8       | 0.0443     | 162         |     100 LR,   15 partitions           |
+| 9       | 0.0        | 55         | 30 LR, 10 partitions      |
+| 10      | 0.1237      | 1412         | 200 LR, 20 partitions           |
+
+** LR == Learning rounds

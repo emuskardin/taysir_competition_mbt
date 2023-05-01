@@ -97,9 +97,10 @@ class RegressionRNNSUL(SUL):
             self.current_word.append(letter)
         prediction = self.get_model_output([self.start_symbol] + self.current_word + [self.end_symbol])
 
+        # if mapper is not defined return concrete value
         if not self.mapper:
             return prediction
-
+        # return abstract value
         return self.mapper.to_abstract(prediction)
 
     def get_model_output(self, seq):
