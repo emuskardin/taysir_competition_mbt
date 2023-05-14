@@ -22,7 +22,8 @@ track = 1
 # all challenges
 model_ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
-for dataset in [5]:
+# skip the first model as it is the biggest one
+for dataset in model_ids[1:]:
     print(f'Track 1, Dataset {dataset}')
 
     model_name = f"models/{track}.{dataset}.taysir.model"
