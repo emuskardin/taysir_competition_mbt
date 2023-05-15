@@ -29,10 +29,10 @@ class AbstractionMapper(ABC):
         pass
 
 
-# Mapper that partitions sorted outputs in predefined number of partitions
-# Output is mapped to the partition to which it has minimal distance
+# Mapper that partitions sorted outputs in predefined number of intervals
+# Output is mapped to the interval to which it has minimal distance
 class NaivePartitioning(AbstractionMapper):
-    def __init__(self, validation_set_with_outputs, num_partitions=20, consider_prefixes=True):
+    def __init__(self, validation_set_with_outputs, num_intervals=20, consider_prefixes=True):
         observed_outputs = set()
 
         for _, outputs in validation_set_with_outputs.items():
@@ -45,20 +45,20 @@ class NaivePartitioning(AbstractionMapper):
         observed_outputs = list(observed_outputs)
         observed_outputs.sort()
 
-        partition_size = len(observed_outputs) // num_partitions
+        interval_size = len(observed_outputs) // num_intervals
 
-        partitions = [observed_outputs[i:i + partition_size] for i in range(0, len(observed_outputs), partition_size)]
-        self.partition_means = [mean(p) for p in partitions]
+        intervals = [observed_outputs[i:i + interval_size] for i in range(0, len(observed_outputs), interval_size)]
+        self.interval_means = [mean(p) for p in intervals]
 
     def to_abstract(self, x):
         diffs = []
-        for partition_mean in self.partition_means:
-            diffs.append(abs(x - partition_mean))
+        for interval_mean in self.interval_means:
+            diffs.append(abs(x - interval_mean))
 
         return diffs.index(min(diffs))
 
     def to_concrete(self, x):
-        return self.partition_means[x]
+        return self.interval_means[x]
 
 
 # disable all gradients
@@ -99,7 +99,7 @@ for dataset in model_ids:
     validation_data_with_outputs = load_validation_data_outputs(sul, validation_data, track, dataset)
 
     # compute a mapper and assign it to the SUL
-    mapper = NaivePartitioning(validation_data_with_outputs, num_partitions=20, consider_prefixes=True)
+    mapper = NaivePartitioning(validation_data_with_outputs, num_intervals=20, consider_prefixes=True)
     sul.mapper = mapper
 
     # three different oracles, all can achieve same results depending on the parametrization
@@ -117,7 +117,7 @@ for dataset in model_ids:
                            max_learning_rounds=20,
                            cache_and_non_det_check=False)
 
-    # replace discrete outputs in the learned model with partition mean
+    # replace discrete outputs in the learned model with interval mean
     for state in learned_model.states:
         state.output = sul.mapper.to_concrete(state.output)
     learned_model.initial_state.output = sul.get_model_output(tuple([start_symbol, end_symbol]))
